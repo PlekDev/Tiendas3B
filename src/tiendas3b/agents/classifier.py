@@ -51,6 +51,11 @@ _KEYWORDS: dict[DocumentType, tuple[str, ...]] = {
 HEURISTIC_MIN_SCORE = 2  # coincidencias mínimas para confiar sin LLM
 FILENAME_WEIGHT = 3  # el nombre del archivo pesa más que una mención suelta
 CLASSIFY_PAGES = 2  # el tipo casi siempre se ve en las primeras páginas
+# El título dice qué es el documento; el cuerpo puede mencionar a los otros tipos (un recibo
+# predial cita la escritura, un alineamiento menciona la tesorería). Medido sobre los 63
+# documentos oficiales: sin esto 61/63 con un empate, con esto 63/63.
+TITLE_CHARS = 300
+TITLE_WEIGHT = 3
 
 
 @dataclass(frozen=True)
@@ -68,10 +73,12 @@ class _LLMClassification(BaseModel):
 def _scores(document: LoadedDocument, pages: int | None) -> dict[DocumentType, int]:
     name = normalize(document.filename.replace("_", " "))
     body = normalize(" ".join(p.text for p in document.pages[:pages]))
+    title = normalize(document.pages[0].text[:TITLE_CHARS]) if document.pages else ""
     scores: dict[DocumentType, int] = {}
     for doc_type, keywords in _KEYWORDS.items():
         score = sum(FILENAME_WEIGHT for k in keywords if k in name)
         score += sum(body.count(k) for k in keywords)
+        score += sum(TITLE_WEIGHT for k in keywords if k in title)
         scores[doc_type] = score
     return scores
 
