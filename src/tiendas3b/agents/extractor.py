@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 Strategy = Literal["auto", "heuristica", "heuristica_amplia", "llm"]
 
-MAX_PROMPT_CHARS = 10_000  # ~3.5k tokens: holgado con num_ctx=8192 (OCR tokeniza mal)
+MAX_PROMPT_CHARS = 2_500  # ~3.5k tokens: holgado con num_ctx=8192 (OCR tokeniza mal)
 MAX_SNIPPET_CHARS = 240
 MIN_AREA_M2 = 20.0  # un local o terreno comercial no mide menos
 
@@ -47,7 +47,6 @@ Extrae SOLO información escrita en el documento. No supongas ni completes datos
 Para cada campo devuelve:
 - "valor": el dato tal como aparece (texto), o null si no aparece.
 - "pagina": número de página donde aparece (los marcadores [Página N] la indican), o null.
-- "cita": fragmento LITERAL copiado del documento que contiene el dato (máx. 120 caracteres).
 Si no estás seguro, usa null. Responde SOLO con JSON:
 {"campos": {"<campo>": {"valor": "...", "pagina": 1, "cita": "..."}}}"""
 
