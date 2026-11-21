@@ -16,6 +16,9 @@
      "descripcion": "Indica la autoridad que lo emite."},
     {"id": "ALI-90", "tipo": "fecha_vigente", "campo": "fecha_emision_vigencia", "severidad": "warning",
      "activa": false, "parametros": {"vigencia_dias": 365},
-     "descripcion": "El alineamiento sigue vigente. PENDIENTE: confirmar la vigencia en la guía oficial."}
+     "descripcion": "El alineamiento sigue vigente. PENDIENTE: confirmar la vigencia en la guía oficial."},
+    {"id": "ALI-91", "tipo": "fecha_anio_actual", "campo": "fecha_emision_vigencia", "severidad": "warning",
+     "parametros": {"anios_tolerancia": 0},
+     "descripcion": "El documento es del año en curso (el año se toma de la fecha del día en que se analiza)."}
   ]
 }
