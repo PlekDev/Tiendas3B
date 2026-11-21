@@ -8,6 +8,7 @@ un campo crítico: reclasifica leyendo todo el documento y re-extrae con otra
 estrategia. Cada nodo deja su paso (agente, ms, conclusión) en la traza.
 """
 
+import logging
 import operator
 import time
 from collections.abc import Callable
@@ -24,6 +25,7 @@ from tiendas3b.agents.synthesizer import synthesize_report
 from tiendas3b.agents.validator import validate_document
 from tiendas3b.ingestion.pdf_loader import LoadedDocument
 from tiendas3b.llm import describe_mode, get_chat_model
+from tiendas3b.logs import register_sensitive
 from tiendas3b.models.schemas import (
     AgentStep,
     CrossValidationIssue,
@@ -33,6 +35,8 @@ from tiendas3b.models.schemas import (
 )
 from tiendas3b.rules.criteria import REQUIRED_DOCUMENT_TYPES
 from tiendas3b.rules.engine import Cartucho, load_cartuchos
+
+logger = logging.getLogger(__name__)
 
 
 class ExpedienteState(TypedDict, total=False):
@@ -61,6 +65,10 @@ def _timed(
         start = time.perf_counter()
         update, detail = fn(state)
         steps = [*update.pop("trace", []), AgentStep(agent=agent, ms=_ms(start), detail=detail)]
+        for step in steps:  # solo agente y tiempo: el detalle puede traer datos del expediente
+            logger.info(
+                "paso %s", step.agent, extra={"event": "agente", "agent": step.agent, "ms": step.ms}
+            )
         return {**update, "trace": steps}
 
     return node
@@ -90,6 +98,7 @@ def build_graph(
 
     def _analyze(doc: LoadedDocument, c: Classification, strategy: Strategy) -> DocumentAnalysis:
         fields, missing = extract_fields(doc, c.document_type, llm, strategy)
+        register_sensitive(f.value for f in fields)
         return DocumentAnalysis(
             document_name=doc.filename,
             document_type=c.document_type,
