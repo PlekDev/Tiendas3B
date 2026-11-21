@@ -92,7 +92,8 @@ def _render_page(page: pymupdf.Page) -> object | None:
         logger.warning("OCR no disponible: falta Pillow (extra [ocr]).")
         return None
     pix = page.get_pixmap(dpi=ocr_dpi())
-    return Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
+    image: object = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
+    return image  # sin Pillow tipado (CI sin el extra [ocr]) esto sería Any
 
 
 def load_pdf(file_path: Path) -> LoadedDocument:
