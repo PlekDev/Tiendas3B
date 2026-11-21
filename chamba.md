@@ -13,12 +13,26 @@ Este archivo dice **quién hace qué**, **qué interfaz entrega cada quien** y *
 | **Aaron** (líder técnico, dueño del repo) | Contrato de datos, orquestador, LLM y configuración, integración | `src/tiendas3b/models/schemas.py`, `src/tiendas3b/agents/orchestrator.py`, `pyproject.toml`, `.env.example`, `.github/workflows/ci.yml`, `README.md`, `docs/` | Grafo corriendo con agentes provisionales y el análisis devuelve el JSON del contrato | Grafo final, reintento del supervisor, manejo de errores, README para correrlo |
 | **Diego** (autor de TrustNode) | Ingesta + OCR, Agente Clasificador, ambiente de las laptops | `src/tiendas3b/ingestion/pdf_loader.py`, `src/tiendas3b/agents/classifier.py` | Texto por página con OCR de respaldo; el clasificador acierta en los expedientes de ejemplo | Clasificador robusto: marca `DESCONOCIDO` y detecta tipos faltantes |
 | **Carlos** | Los 4 Agentes Extractores, un modelo por tipo sacado de cada guía, con evidencia por campo | `src/tiendas3b/agents/extractor.py` (y los módulos por tipo que cree) | Extractores de Escrituras y Predial funcionando | Los 4 extractores con citas; prompts afinados con `evaluacion/` |
-| **Andrés** | Cartuchos de reglas, Agente Validador Normativo, Agente de Validación Cruzada, Dictaminador, medición de precisión | `src/tiendas3b/rules/criteria.py`, `src/tiendas3b/agents/validator.py`, `src/tiendas3b/agents/cross_validator.py`, `src/tiendas3b/agents/synthesizer.py`, `evaluacion/` | Reglas de una guía + cruce de dirección y superficie + dictamen básico | Todas las reglas y los 5 cruces; reporte de precisión para el pitch |
+| **Andrés** | Reglas básicas (completitud y congruencia), espacio para reglas específicas (cartuchos JSON), Agente Validador Normativo, Agente de Validación Cruzada, Dictaminador, medición de precisión | `src/tiendas3b/rules/criteria.py`, `src/tiendas3b/agents/validator.py`, `src/tiendas3b/agents/cross_validator.py`, `src/tiendas3b/agents/synthesizer.py`, `evaluacion/` | Completitud de una guía + cruce de dirección y superficie + dictamen básico | Completitud de los 4 tipos, los 5 cruces y el dictamen; reglas específicas solo si sobra tiempo; reporte de precisión para el pitch |
 | **Victor** | Interfaz de la demo (a partir del frontend de TrustNode), pitch, video de respaldo | `src/tiendas3b/ui/app.py`, `interfaz/`, `pitch/` | Pantalla de carga + veredicto conectada al JSON de ejemplo; guion del pitch v1 | Demo pulida (veredicto, matriz, hallazgos con cita, traza del grafo); pitch ensayado ×3; video |
 
 > `evaluacion/` y `pitch/` todavía no existen en el repo: quien los necesite los crea en su PR.
 
 Si cambias de rol o alguien se atora, lo dices en `estado/` (sección 4), no en un chat que se pierde.
+
+---
+
+## 0. Alcance del MVP (confirmado con el comité)
+
+- **Tipos de documento mínimos:** Escrituras, Predial, Alineamiento y Número Oficial, Uso de Suelo. Cada tipo trae su guía oficial con los datos a localizar.
+- **Reglas básicas obligatorias:**
+  1. **Completitud:** cada documento tiene los datos que pide su guía.
+  2. **Congruencia entre documentos:** dirección, propietario, superficie, clave catastral o cuenta predial, y número oficial coinciden entre los documentos que los reportan.
+- **Reglas específicas:** no son obligatorias para el MVP. Si las definimos, suman puntos. Ejemplo: la superficie del terreno es la misma en todos los documentos (esa es una congruencia, ya cuenta en el punto 2).
+- **Veredicto:** Cumple / Requiere revisión / No cumple, con evidencia citada (documento, página, cita).
+- **Lo que no esté en la guía o en este alcance no se evalúa como falla.** Si un dato falta o no se puede citar, va a "duda" → Requiere revisión.
+- **Espacio para reglas:** las reglas específicas se agregarán como cartuchos JSON en `src/tiendas3b/rules/cartuchos/`, sin tocar código del motor. *(Propuesto; lo construimos en la rama de Andrés/Victor.)*
+- **Pendiente de confirmar con la guía oficial:** vigencia del alineamiento y del uso de suelo (en varios municipios, alrededor de un año). No es regla nuestra hasta que la guía lo diga.
 
 ---
 
@@ -74,6 +88,7 @@ Cada módulo expone una función con firma fija. Mientras el módulo real no est
 - **Los datos de 3B solo se usan dentro del reto.** No se suben a ningún servicio externo.
 - **Nada de documentos de 3B en ChatGPT, Claude u otros servicios**, a menos que el comité lo autorice.
 - Los expedientes reales van en `data/raw/` o `data/expedientes/`. Ya están en `.gitignore` (también `*.pdf` y `*.zip`): **nunca se suben al repo**.
+- Los ZIP oficiales (Escrituras, Predial, Alineamiento y Número Oficial, Uso de Suelo) son datos de 3B: se quedan fuera del repo y no se pegan en servicios externos sin autorización del comité.
 - Los fixtures (datos falsos) sí van al repo, en `tests/fixtures/`.
 - El veredicto lo da la solución, no una persona.
 - Toda conclusión sale de los documentos originales.
