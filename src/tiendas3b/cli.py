@@ -5,6 +5,7 @@ ejemplo [caso]                 Expediente ficticio: cumple, revision, no_cumple,
 evaluar                        Precisión contra veredictos esperados
 demo-pdfs                      Escribe los expedientes ficticios como PDFs
 estado                         Configuración, LLM y cartuchos de reglas
+diagnostico [carpeta]          OCR y clasificador sobre documentos reales (solo conteos)
 grafo                          Diagrama Mermaid del grafo de agentes
 api                            Levanta la API para la interfaz
 """
@@ -18,6 +19,12 @@ from tiendas3b.agents.orchestrator import analyze_expediente, graph_mermaid
 from tiendas3b.config import PROJECT_ROOT, get_settings
 from tiendas3b.demo import DEMO_CASES, demo_documents, write_demo_pdfs
 from tiendas3b.evaluacion import evaluate_demo, evaluate_dirs, format_rows
+from tiendas3b.ingestion.diagnostico import (
+    diagnose,
+    find_documents,
+    format_details,
+    format_summary,
+)
 from tiendas3b.ingestion.pdf_loader import (
     SUPPORTED_SUFFIXES,
     load_document,
@@ -114,6 +121,20 @@ def _cmd_demo_pdfs(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_diagnostico(args: argparse.Namespace) -> int:
+    root = Path(args.carpeta)
+    paths = find_documents(root)
+    rows = []
+    for i, path in enumerate(paths, start=1):
+        print(f"\r[{i}/{len(paths)}] leyendo…", end="", file=sys.stderr, flush=True)
+        rows.append(diagnose(path))
+    print(file=sys.stderr)
+    if args.detalle:
+        print(format_details(rows, root) + "\n")
+    print(format_summary(rows))
+    return 0
+
+
 def _cmd_estado(_: argparse.Namespace) -> int:
     settings = get_settings()
     cartuchos = load_cartuchos()
@@ -174,6 +195,15 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=_cmd_demo_pdfs)
 
     sub.add_parser("estado", help="Configuración y salud.").set_defaults(func=_cmd_estado)
+
+    p = sub.add_parser("diagnostico", help="OCR y clasificador sobre documentos reales.")
+    p.add_argument("carpeta", nargs="?", default=str(PROJECT_ROOT / "data" / "raw"))
+    p.add_argument(
+        "--detalle",
+        action="store_true",
+        help="Una línea por archivo (trae nombres de archivo: no la compartas fuera del equipo).",
+    )
+    p.set_defaults(func=_cmd_diagnostico)
     sub.add_parser("grafo", help="Diagrama Mermaid del grafo.").set_defaults(func=_cmd_grafo)
 
     p = sub.add_parser("api", help="Levanta la API.")
