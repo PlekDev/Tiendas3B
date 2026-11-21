@@ -1,4 +1,4 @@
-PY ?= python3.11
+PY ?= $(shell command -v python3.11 || command -v python3.12 || command -v python3)
 VENV := .venv
 BIN := $(VENV)/bin
 
