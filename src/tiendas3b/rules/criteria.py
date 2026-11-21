@@ -67,6 +67,9 @@ class CrossCheck:
     comparator: Comparator
     severity: Severity
     threshold: float  # texto: similitud mínima 0–100 · superficie: diferencia máx. en %
+    # Escalamiento opcional a "critical" cuando la diferencia es grande:
+    # texto: similitud por debajo de esto · superficie: diferencia en % por encima de esto.
+    critical_threshold: float | None = None
 
 
 # Los 5 cruces del reto. Severidad provisional: ajústala aquí, no en el código del agente.
@@ -79,8 +82,12 @@ CROSS_CHECKS: tuple[CrossCheck, ...] = (
             DocumentType.PREDIAL: "propietario",
         },
         comparator="texto",
-        severity="critical",
+        # Entre 50 y 85 % de similitud es "Requiere revisión": el predial suele quedarse con
+        # el dueño anterior, abreviar razones sociales o traer errores de captura.
+        # Debajo de 50 % es otra persona: "critical".
+        severity="warning",
         threshold=85.0,
+        critical_threshold=50.0,
     ),
     CrossCheck(
         key="direccion",
