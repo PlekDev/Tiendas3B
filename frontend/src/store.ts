@@ -5,9 +5,18 @@ const KEY = "tiendas3b.bandeja.v1";
 
 /** URLs locales de los PDFs subidos: viven solo en memoria del navegador. */
 const fileUrls = new Map<string, string>();
+const fileObjs = new Map<string, File>();
 
 export function rememberFiles(expedienteId: string, files: File[]): void {
-  for (const f of files) fileUrls.set(`${expedienteId}/${f.name}`, URL.createObjectURL(f));
+  for (const f of files) {
+    fileUrls.set(`${expedienteId}/${f.name}`, URL.createObjectURL(f));
+    fileObjs.set(`${expedienteId}/${f.name}`, f);
+  }
+}
+
+/** El archivo subido en esta sesión (para el visor marcado). Nunca se guarda en disco. */
+export function fileOf(expedienteId: string, name: string): File | undefined {
+  return fileObjs.get(`${expedienteId}/${name}`);
 }
 
 export function fileUrl(expedienteId: string, name: string): string | undefined {

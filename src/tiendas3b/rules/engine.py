@@ -130,6 +130,32 @@ def _check_fecha_vigente(rule: Rule, field: ExtractedField | None, today: date) 
     return True, f"Vigente hasta {expires.isoformat()}."
 
 
+def _check_fecha_anio_actual(rule: Rule, field: ExtractedField | None, today: date) -> Outcome:
+    """El documento es del año en curso. El año sale de `today` (date.today() al correr).
+
+    Pasa si la fecha más reciente cae en el año actual (o dentro de `anios_tolerancia`),
+    o si el documento declara una vigencia que todavía no vence. Una fecha en el futuro
+    se marca: casi siempre es un error de lectura (OCR) que alguien debe ver.
+    """
+    if not _has_value(field):
+        return False, f"No se encontró fecha en '{rule.campo}'."
+    assert field is not None
+    dates = find_dates(field.value or "")
+    if not dates:
+        return False, f"No se pudo leer una fecha en '{field.value}'."
+    tolerance = int(rule.parametros.get("anios_tolerancia", 0))
+    issued, latest = min(dates), max(dates)
+    if issued > today + timedelta(days=31):  # la emisión no puede ser futura; la vigencia sí
+        return False, f"Fecha de emisión en el futuro ({issued.isoformat()}): revisar la lectura."
+    if len(dates) > 1 and latest >= today:  # emisión + vencimiento que no ha pasado
+        return True, f"Vigente hasta {latest.isoformat()} (año en curso: {today.year})."
+    if latest.year >= today.year - tolerance:
+        return True, f"Fecha {latest.isoformat()} corresponde al año en curso ({today.year})."
+    return False, (
+        f"La fecha más reciente es {latest.isoformat()}; no es del año en curso ({today.year})."
+    )
+
+
 def _check_numero_positivo(rule: Rule, field: ExtractedField | None, today: date) -> Outcome:
     number = parse_number(field.value or "") if field else None
     if number is None or number <= 0:
@@ -143,6 +169,7 @@ RULE_TYPES: dict[str, RuleCheck] = {
     "no_contiene": _check_no_contiene,
     "alerta_si_presente": _check_alerta_si_presente,
     "fecha_vigente": _check_fecha_vigente,
+    "fecha_anio_actual": _check_fecha_anio_actual,
     "numero_positivo": _check_numero_positivo,
 }
 

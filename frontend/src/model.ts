@@ -478,3 +478,114 @@ export function snippetsOf(report: Report, doc: string, page: number | null): st
   ].filter((e): e is Evidence => !!e && e.document_name === doc && (page == null || e.page === page));
   return [...new Set(all.map((e) => e.snippet))];
 }
+
+/* ---------- Documentos marcados ---------- */
+
+export interface DocMark {
+  id: string;
+  kind: "dato" | "regla";
+  campo: string;
+  value: string | null;
+  snippet: string | null;
+  page: number | null;
+  tone: Tone;
+  note: string;
+}
+
+const MARK_RANK: Record<string, number> = { bad: 0, warn: 1, doubt: 2, info: 3, ok: 4 };
+
+/** Qué subrayar en cada documento: cada dato leído y cada regla que no se cumple. */
+export function docMarks(report: Report, a: DocumentAnalysis): DocMark[] {
+  const marks: DocMark[] = [];
+  a.extracted_fields.forEach((f, i) => {
+    if (!(f.value ?? "").trim()) return;
+    const row = CROSS_ROWS.find((r) => r.fields[a.document_type] === f.name);
+    const issue = row && report.cross_validation_issues.find((x) => x.field_name === row.key);
+    const involved =
+      issue && (issue.documents_involved.includes(a.document_name) || a.document_name in issue.values_found);
+    const doubt = f.confidence < DOUBT_THRESHOLD;
+    marks.push({
+      id: `f${i}`,
+      kind: "dato",
+      campo: fieldLabel(f.name),
+      value: f.value,
+      snippet: f.evidence?.document_name === a.document_name ? f.evidence.snippet : null,
+      page: f.evidence?.page ?? null,
+      tone: involved ? SEV_TONE[issue!.severity] : doubt ? "doubt" : "ok",
+      note: involved
+        ? cleanReason(issue!.description).text
+        : doubt
+          ? `En duda: se leyó con ${Math.round(f.confidence * 100)} % de seguridad.`
+          : `Leído con ${Math.round(f.confidence * 100)} % de seguridad.`,
+    });
+  });
+  a.rule_evaluations.forEach((r, i) => {
+    if (r.passed) return;
+    r.evidence
+      .filter((e) => e.document_name === a.document_name)
+      .forEach((e, j) =>
+        marks.push({
+          id: `r${i}-${j}`,
+          kind: "regla",
+          campo: r.description,
+          value: null,
+          snippet: e.snippet,
+          page: e.page,
+          tone: sevTone(r),
+          note: cleanReason(r.details).text,
+        }),
+      );
+  });
+  // Un dato que es la prueba de una regla incumplida toma el color de esa regla.
+  marks.forEach((m) => {
+    if (m.kind !== "dato" || m.tone !== "ok" || !m.snippet) return;
+    const rule = marks.find((r) => r.kind === "regla" && r.snippet === m.snippet);
+    if (rule) {
+      m.tone = rule.tone;
+      m.note = `${rule.campo} ${rule.note}`;
+    }
+  });
+  return marks.sort((x, y) => MARK_RANK[x.tone] - MARK_RANK[y.tone]);
+}
+
+/* ---------- Datos listos para copiar ---------- */
+
+export interface CopyDoc {
+  key: string;
+  title: string;
+  file: string;
+  rows: { campo: string; value: string | null; doubt: boolean }[];
+}
+
+export function copyDocs(report: Report): CopyDoc[] {
+  const rank = (t: DocType) => (DOC_ORDER.includes(t) ? DOC_ORDER.indexOf(t) : 99);
+  return [...report.document_analyses]
+    .sort((x, y) => rank(x.document_type) - rank(y.document_type))
+    .map((a) => {
+      const rows = a.extracted_fields.map((f) => ({
+        campo: fieldLabel(f.name),
+        value: (f.value ?? "").trim() || null,
+        doubt: !!f.value && f.confidence < DOUBT_THRESHOLD,
+      }));
+      a.missing_fields
+        .filter((m) => !a.extracted_fields.some((f) => f.name === m))
+        .forEach((m) => rows.push({ campo: fieldLabel(m), value: null, doubt: false }));
+      return { key: a.document_name, title: DOC_LABEL[a.document_type], file: a.document_name, rows };
+    })
+    .filter((d) => d.rows.length > 0);
+}
+
+const copyLine = (r: CopyDoc["rows"][number]) =>
+  `${r.campo}: ${r.value ?? "No encontrado"}${r.doubt ? " (en duda)" : ""}`;
+
+export function copyDocText(d: CopyDoc): string {
+  return [`${d.title.toUpperCase()} (${d.file})`, ...d.rows.map(copyLine)].join("\n");
+}
+
+export function copyAllText(report: Report, docs: CopyDoc[]): string {
+  const head = [
+    `Expediente: ${report.expediente_id}`,
+    `Dictamen: ${report.recommendation} (confianza ${Math.round(report.confidence * 100)} %)`,
+  ];
+  return [head.join("\n"), ...docs.map(copyDocText)].join("\n\n");
+}
