@@ -99,7 +99,6 @@ def test_retry_recovers_multiline_field_with_llm_active() -> None:
                     "Contribuyente\n"
                     "Inmobiliaria Reforma S.A. de C.V.\n"
                     "Ubicación del predio: Av. Reforma 100\n"
-                    "Cuenta predial: 114-002-007-000\n"
                     "Superficie de terreno: 850 m2\n"
                 ),
             )

@@ -164,6 +164,8 @@ def classify(
     from_llm = _llm(document, llm)
     if from_llm is None:
         return heuristic
+    if from_llm.document_type != DocumentType.DESCONOCIDO and from_llm.confidence < 0.6:
+        return Classification(DocumentType.DESCONOCIDO, from_llm.confidence, "llm")
     if from_llm.document_type == heuristic.document_type:
         confidence = max(heuristic.confidence, from_llm.confidence)
         return Classification(heuristic.document_type, confidence, "llm")

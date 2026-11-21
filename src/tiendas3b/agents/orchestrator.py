@@ -165,7 +165,7 @@ def build_graph(
             if not (needs_type or needs_fields):
                 updated.append(analysis)
                 continue
-            if needs_type:
+            if needs_type and len(doc.pages) > 2:
                 c = classify(doc, llm, all_pages=True)
             type_changed = needs_type and c.document_type != DocumentType.DESCONOCIDO
             if type_changed and llm is not None:
