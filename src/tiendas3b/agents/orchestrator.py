@@ -167,7 +167,19 @@ def build_graph(
                 continue
             if needs_type:
                 c = classify(doc, llm, all_pages=True)
-            retry = _analyze(doc, c, "heuristica_amplia" if llm is None else "auto")
+            type_changed = needs_type and c.document_type != DocumentType.DESCONOCIDO
+            if type_changed and llm is not None:
+                retry = _analyze(doc, c, "auto")
+                if critical_fields(c.document_type) & set(retry.missing_fields):
+                    wide_retry = _analyze(doc, c, "heuristica_amplia")
+                    by_name = {f.name: f for f in retry.extracted_fields}
+                    for f in wide_retry.extracted_fields:
+                        if f.name not in by_name or by_name[f.name].confidence < f.confidence:
+                            by_name[f.name] = f
+                    retry.extracted_fields = list(by_name.values())
+                    retry.missing_fields = [m for m in retry.missing_fields if m not in by_name]
+            else:
+                retry = _analyze(doc, c, "heuristica_amplia")
             merged = {f.name: f for f in analysis.extracted_fields}
             if retry.document_type == analysis.document_type:
                 for f in retry.extracted_fields:

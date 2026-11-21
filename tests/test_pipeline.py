@@ -79,3 +79,36 @@ def test_graph_diagram_lists_agents() -> None:
     diagram = graph_mermaid()
     for node in ("clasificador", "extractores", "reintento", "validacion_cruzada", "dictaminador"):
         assert node in diagram
+
+
+def test_retry_recovers_multiline_field_with_llm_active() -> None:
+    """Cuando el LLM está activo y falta un campo crítico, reintento usa heurística amplia."""
+    from pathlib import Path
+
+    from tiendas3b.ingestion.pdf_loader import LoadedDocument, LoadedPage
+
+    # 'propietario' viene en el renglón debajo de la etiqueta (requiere heuristica_amplia)
+    multiline_predial = LoadedDocument(
+        filename="predial_multiline.pdf",
+        path=Path("predial_multiline.pdf"),
+        pages=[
+            LoadedPage(
+                page_number=1,
+                text=(
+                    "BOLETA PREDIAL\n"
+                    "Contribuyente\n"
+                    "Inmobiliaria Reforma S.A. de C.V.\n"
+                    "Ubicación del predio: Av. Reforma 100\n"
+                    "Cuenta predial: 114-002-007-000\n"
+                    "Superficie de terreno: 850 m2\n"
+                ),
+            )
+        ],
+    )
+    # El LLM devuelve JSON vacío, obligando al supervisor a activar reintento
+    llm = FakeListChatModel(responses=['{"campos": {}}'] * 5)
+    report = analyze_expediente("EXP-RETRY-LLM", [multiline_predial], llm=llm)
+    assert "supervisor_reintento" in [s.agent for s in report.trace]
+    predial_analysis = report.document_analyses[0]
+    extracted_names = {f.name for f in predial_analysis.extracted_fields}
+    assert "propietario" in extracted_names
