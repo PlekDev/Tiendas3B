@@ -79,6 +79,7 @@ FIELD_SPECS: dict[DocumentType, dict[str, FieldSpec]] = {
             "Dato que lo liga a otros documentos: folio real o número de escritura.",
             ("folio real", "numero de escritura", "escritura"),
         ),
+        "fecha_emision_vigencia": _FECHA,
     },
     DocumentType.ALINEAMIENTO: {
         "direccion_oficial": FieldSpec(

@@ -52,6 +52,7 @@ data/raw/*
 data/expedientes/*
 !data/raw/.gitkeep
 !data/expedientes/.gitkeep
+data/tessdata/*
 
 # Interfaz (frontend/)
 node_modules/

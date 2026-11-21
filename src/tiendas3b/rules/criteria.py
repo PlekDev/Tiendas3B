@@ -34,6 +34,7 @@ REQUIRED_FIELDS_BY_TYPE: dict[DocumentType, tuple[str, ...]] = {
         "cuenta_predial",
         "superficie_registrada",
         "referencia_cruzada",
+        "fecha_emision_vigencia",
     ),
     DocumentType.ALINEAMIENTO: (
         "direccion_oficial",
