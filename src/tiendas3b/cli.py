@@ -26,7 +26,7 @@ from tiendas3b.ingestion.diagnostico import (
     format_summary,
 )
 from tiendas3b.ingestion.pdf_loader import (
-    SUPPORTED_SUFFIXES,
+    is_document_file,
     load_document,
     load_expediente_dir,
 )
@@ -82,7 +82,7 @@ def _cmd_analizar(args: argparse.Namespace) -> int:
         documents = load_expediente_dir(targets[0])
         expediente_id = args.id or targets[0].name
     else:
-        documents = [load_document(p) for p in targets if p.suffix.lower() in SUPPORTED_SUFFIXES]
+        documents = [load_document(p) for p in targets if is_document_file(p)]
         expediente_id = args.id or "EXP-CLI"
     if not documents:
         print("No encontré PDFs ni imágenes en esa ruta.", file=sys.stderr)
@@ -128,9 +128,7 @@ def _cmd_agrupar(args: argparse.Namespace) -> int:
     from tiendas3b.llm import get_chat_model
 
     root = Path(args.origen)
-    paths = sorted(
-        p for p in root.rglob("*") if p.is_file() and p.suffix.lower() in SUPPORTED_SUFFIXES
-    )
+    paths = sorted(p for p in root.rglob("*") if is_document_file(p))
     if not paths:
         print(f"No encontré PDFs ni imágenes en {root}.", file=sys.stderr)
         return 1

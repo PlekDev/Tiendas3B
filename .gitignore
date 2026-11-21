@@ -61,3 +61,6 @@ reportes/
 
 # Logs y bitácora (pueden traer IDs de expedientes)
 logs/
+
+# Caché local de OCR (texto de documentos: nunca se sube)
+data/cache/

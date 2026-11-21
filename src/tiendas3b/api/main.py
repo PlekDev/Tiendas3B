@@ -188,7 +188,8 @@ async def analizar_endpoint(
         tempfile.TemporaryDirectory(prefix="tiendas3b-") as tmp,
     ):
         paths = await _save_uploads_to_dir(files, Path(tmp))
-        documents = [await run_in_threadpool(load_document, p) for p in paths]
+        # Sin caché: los documentos subidos no dejan rastro en el servidor.
+        documents = [await run_in_threadpool(load_document, p, False) for p in paths]
         logger.info(
             "Analizando %d documentos",
             len(documents),

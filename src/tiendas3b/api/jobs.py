@@ -138,7 +138,8 @@ class JobQueue:
 
         try:
             with log_context(record.expediente_id) as request_id:
-                documents = [load_document(path) for path in record.file_paths]
+                # Sin caché: lo que se sube a la API no deja rastro en el servidor.
+                documents = [load_document(path, False) for path in record.file_paths]
                 logger.info(
                     "Trabajo %s: analizando %s (%d documentos)…",
                     job_id,
