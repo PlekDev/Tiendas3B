@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, LayoutGroup, MotionConfig, motion } from "motion/react";
 import { Cpu, FilePlus2, Inbox as InboxIcon, Moon, Sun, WifiOff, Workflow } from "lucide-react";
 import type { ApiStatus, Entry } from "./types";
@@ -42,8 +42,11 @@ export default function App() {
   const [status, setStatus] = useState<ApiStatus | null | "error">(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [doneId, setDoneId] = useState<string | null>(null);
   const [theme, toggleTheme] = useTheme();
   const { entries, upsert, remove } = useBandeja();
+  const viewRef = useRef(view.name);
+  viewRef.current = view.name;
 
   useEffect(() => {
     const check = () => getStatus().then(setStatus).catch(() => setStatus("error"));
@@ -53,6 +56,7 @@ export default function App() {
   }, []);
 
   const go = (v: View) => {
+    setDoneId(null);
     setView(v);
     window.scrollTo({ top: 0 });
   };
@@ -66,7 +70,9 @@ export default function App() {
         const report = await job();
         if (report.expediente_id !== id) remove(id);
         upsert({ id: report.expediente_id, createdAt: Date.now(), status: "listo", report });
-        go({ name: "dictamen", id: report.expediente_id });
+        // En "Nuevo expediente" el resultado se muestra ahí mismo (tarjeta con "Archivar en la bandeja").
+        if (viewRef.current === "new") setDoneId(report.expediente_id);
+        else go({ name: "dictamen", id: report.expediente_id });
       } catch (e) {
         const msg = e instanceof Error ? e.message : "Error desconocido";
         upsert({ id, createdAt: Date.now(), status: "error", error: msg });
@@ -229,8 +235,11 @@ export default function App() {
             <NewExpediente
               busy={busy}
               aiAvailable={aiAvailable}
+              offline={offline}
               initialId={view.id}
               error={error}
+              result={doneId ? entries.find((e) => e.id === doneId)?.report : undefined}
+              onOpenResult={() => doneId && go({ name: "dictamen", id: doneId })}
               onAnalyze={onAnalyze}
               onExample={onExample}
               onCancel={() => go({ name: "inbox" })}
