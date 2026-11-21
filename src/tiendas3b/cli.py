@@ -10,7 +10,6 @@ api                            Levanta la API para la interfaz
 """
 
 import argparse
-import logging
 import sys
 from pathlib import Path
 
@@ -24,6 +23,7 @@ from tiendas3b.ingestion.pdf_loader import (
     load_expediente_dir,
 )
 from tiendas3b.llm import describe_mode, is_reachable
+from tiendas3b.logs import log_context, record_dictamen, setup_logging
 from tiendas3b.models.schemas import ExpedienteReport
 from tiendas3b.rules.criteria import DOCUMENT_LABELS
 from tiendas3b.rules.engine import load_cartuchos
@@ -79,7 +79,9 @@ def _cmd_analizar(args: argparse.Namespace) -> int:
     if not documents:
         print("No encontré PDFs ni imágenes en esa ruta.", file=sys.stderr)
         return 1
-    report = analyze_expediente(expediente_id, documents, use_llm=not args.sin_llm)
+    with log_context(expediente_id) as request_id:
+        report = analyze_expediente(expediente_id, documents, use_llm=not args.sin_llm)
+        record_dictamen(report, "cli", request_id)
     _emit(report, args)
     return 0
 
@@ -185,7 +187,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(name)s: %(message)s")
+    setup_logging(console_level="WARNING")
     args = build_parser().parse_args(argv)
     code: int = args.func(args)
     return code
