@@ -8,11 +8,13 @@ un campo crítico: reclasifica leyendo todo el documento y re-extrae con otra
 estrategia. Cada nodo deja su paso (agente, ms, conclusión) en la traza.
 """
 
+import contextvars
 import logging
 import operator
 import time
-from collections.abc import Callable
-from typing import Annotated, Any, TypedDict
+from collections.abc import Callable, Sequence
+from concurrent.futures import ThreadPoolExecutor
+from typing import Annotated, Any, TypedDict, TypeVar
 
 from langchain_core.language_models import BaseChatModel
 from langgraph.graph import END, START, StateGraph
@@ -24,7 +26,7 @@ from tiendas3b.agents.extractor import Strategy, critical_fields, extract_fields
 from tiendas3b.agents.synthesizer import synthesize_report
 from tiendas3b.agents.validator import validate_document
 from tiendas3b.ingestion.pdf_loader import LoadedDocument
-from tiendas3b.llm import describe_mode, get_chat_model
+from tiendas3b.llm import describe_mode, get_chat_model, llm_parallel
 from tiendas3b.logs import register_sensitive
 from tiendas3b.models.schemas import (
     AgentStep,
@@ -74,6 +76,19 @@ def _timed(
     return node
 
 
+T = TypeVar("T")
+R = TypeVar("R")
+
+
+def _parallel_map(fn: Callable[[T], R], items: Sequence[T], workers: int) -> list[R]:
+    """Aplica fn a cada elemento en hilos, en orden y con el contexto de logs del expediente."""
+    if workers <= 1 or len(items) <= 1:
+        return [fn(item) for item in items]
+    with ThreadPoolExecutor(max_workers=min(workers, len(items))) as pool:
+        futures = [pool.submit(contextvars.copy_context().run, fn, item) for item in items]
+        return [future.result() for future in futures]
+
+
 def _needs_retry(state: ExpedienteState) -> bool:
     for analysis in state.get("analyses", []):
         if analysis.document_type == DocumentType.DESCONOCIDO:
@@ -89,8 +104,12 @@ def build_graph(
 ) -> CompiledStateGraph[ExpedienteState, Any, ExpedienteState, ExpedienteState]:
     """Arma el grafo. `llm=None` corre todo por la ruta heurística."""
 
+    workers = llm_parallel() if llm is not None else 1
+
     def clasificador(state: ExpedienteState) -> NodeResult:
-        result = {doc.filename: classify(doc, llm) for doc in state["documents"]}
+        docs = state["documents"]
+        found = _parallel_map(lambda doc: classify(doc, llm), docs, workers)
+        result = {doc.filename: c for doc, c in zip(docs, found, strict=True)}
         detail = ", ".join(
             f"{name} → {c.document_type.value} ({c.confidence:.0%})" for name, c in result.items()
         )
@@ -109,23 +128,26 @@ def build_graph(
         )
 
     def extractores(state: ExpedienteState) -> NodeResult:
-        analyses: list[DocumentAnalysis] = []
-        steps: list[AgentStep] = []
-        for doc in state["documents"]:
+        def extract_one(doc: LoadedDocument) -> tuple[DocumentAnalysis, AgentStep]:
             start = time.perf_counter()
             c = state["classifications"][doc.filename]
             analysis = _analyze(doc, c, "auto")
-            analyses.append(analysis)
-            steps.append(
-                AgentStep(
-                    agent=f"extractor_{c.document_type.value}",
-                    ms=_ms(start),
-                    detail=(
-                        f"{doc.filename}: {len(analysis.extracted_fields)} campos, "
-                        f"faltan {len(analysis.missing_fields)}"
-                    ),
-                )
+            step = AgentStep(
+                agent=f"extractor_{c.document_type.value}",
+                ms=_ms(start),
+                detail=(
+                    f"{doc.filename}: {len(analysis.extracted_fields)} campos, "
+                    f"faltan {len(analysis.missing_fields)}"
+                ),
             )
+            return analysis, step
+
+        # Un extractor por documento, en paralelo: el LLM es lo que más tarda.
+        results = _parallel_map(extract_one, state["documents"], workers)
+        analyses = [analysis for analysis, _ in results]
+        steps = [step for _, step in results]
+        for analysis in analyses:  # en este hilo, para que la redacción de logs los conozca
+            register_sensitive(f.value for f in analysis.extracted_fields)
         total = sum(len(a.extracted_fields) for a in analyses)
         return {"analyses": analyses, "trace": steps}, f"{total} campos con evidencia"
 
@@ -145,7 +167,19 @@ def build_graph(
                 continue
             if needs_type:
                 c = classify(doc, llm, all_pages=True)
-            retry = _analyze(doc, c, "heuristica_amplia" if llm is None else "auto")
+            type_changed = needs_type and c.document_type != DocumentType.DESCONOCIDO
+            if type_changed and llm is not None:
+                retry = _analyze(doc, c, "auto")
+                if critical_fields(c.document_type) & set(retry.missing_fields):
+                    wide_retry = _analyze(doc, c, "heuristica_amplia")
+                    by_name = {f.name: f for f in retry.extracted_fields}
+                    for f in wide_retry.extracted_fields:
+                        if f.name not in by_name or by_name[f.name].confidence < f.confidence:
+                            by_name[f.name] = f
+                    retry.extracted_fields = list(by_name.values())
+                    retry.missing_fields = [m for m in retry.missing_fields if m not in by_name]
+            else:
+                retry = _analyze(doc, c, "heuristica_amplia")
             merged = {f.name: f for f in analysis.extracted_fields}
             if retry.document_type == analysis.document_type:
                 for f in retry.extracted_fields:

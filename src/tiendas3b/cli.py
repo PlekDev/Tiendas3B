@@ -133,13 +133,15 @@ def _cmd_evaluar(args: argparse.Namespace) -> int:
 
 
 def _cmd_agrupar(args: argparse.Namespace) -> int:
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
     from tiendas3b.ingestion.agrupar import (
         document_keys,
         format_plan,
         group_documents,
         write_groups,
     )
-    from tiendas3b.llm import get_chat_model
+    from tiendas3b.llm import get_chat_model, llm_parallel
 
     root = Path(args.origen)
     paths = sorted(p for p in root.rglob("*") if is_document_file(p))
@@ -147,10 +149,17 @@ def _cmd_agrupar(args: argparse.Namespace) -> int:
         print(f"No encontré PDFs ni imágenes en {root}.", file=sys.stderr)
         return 1
     llm = None if args.sin_llm else get_chat_model()
+    documents = []
+    for i, path in enumerate(paths, start=1):  # el OCR ya reparte los núcleos por página
+        print(f"\r[{i}/{len(paths)}] leyendo…", end="", file=sys.stderr, flush=True)
+        documents.append((path, load_document(path)))
+    print(file=sys.stderr)
     keys = []
-    for i, path in enumerate(paths, start=1):
-        print(f"\r[{i}/{len(paths)}] clasificando…", end="", file=sys.stderr, flush=True)
-        keys.append(document_keys(load_document(path), path, llm))
+    with ThreadPoolExecutor(max_workers=llm_parallel() if llm else 1) as pool:
+        futures = [pool.submit(document_keys, doc, path, llm) for path, doc in documents]
+        for i, future in enumerate(as_completed(futures), start=1):
+            print(f"\r[{i}/{len(paths)}] clasificando…", end="", file=sys.stderr, flush=True)
+            keys.append(future.result())
     print(file=sys.stderr)
     groups = group_documents(keys)
     print(format_plan(groups, root))

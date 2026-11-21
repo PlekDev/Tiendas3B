@@ -13,6 +13,7 @@ import json
 import logging
 import os
 import re
+from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -79,30 +80,59 @@ def ocr_dpi() -> int:
     return int(os.getenv("OCR_DPI") or "300")
 
 
-def _ocr_page(page: pymupdf.Page, lang: str) -> str:
+def ocr_workers() -> int:
+    """Páginas que se pasan por OCR a la vez. Por defecto, un tesseract por núcleo."""
+    return max(1, min(8, int(os.getenv("OCR_WORKERS") or os.cpu_count() or 1)))
+
+
+def _render_page(page: pymupdf.Page) -> object | None:
     try:
         from PIL import Image
     except ImportError:
         logger.warning("OCR no disponible: falta Pillow (extra [ocr]).")
-        return ""
+        return None
     pix = page.get_pixmap(dpi=ocr_dpi())
-    image = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
-    return _ocr_image(image, lang)
+    image: object = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
+    return image  # sin Pillow tipado (CI sin el extra [ocr]) esto sería Any
 
 
 def load_pdf(file_path: Path) -> LoadedDocument:
-    """Extrae el texto página por página; si una página no tiene texto, intenta OCR."""
+    """Extrae el texto página por página; las páginas sin texto pasan por OCR en paralelo.
+
+    PyMuPDF no es seguro entre hilos, así que las páginas se dibujan en este hilo y solo
+    tesseract (un proceso aparte) corre en paralelo. Hay a lo más 2 imágenes en espera
+    por worker, para no llenar la memoria con documentos largos.
+    """
     lang = get_settings().ocr_lang
-    pages: list[LoadedPage] = []
-    with pymupdf.open(file_path) as doc:  # type: ignore[no-untyped-call]
+    workers = ocr_workers()
+    if workers > 1:
+        os.environ.setdefault("OMP_THREAD_LIMIT", "1")  # los workers ya reparten los núcleos
+    texts: dict[int, str] = {}
+    ocr: dict[int, Future[str]] = {}
+    with (
+        ThreadPoolExecutor(max_workers=workers) as pool,
+        pymupdf.open(file_path) as doc,  # type: ignore[no-untyped-call]
+    ):
         for idx, page in enumerate(doc, start=1):
-            text = clean_text(page.get_text("text"))
-            source = "pdf"
-            if len(text) < MIN_TEXT_CHARS:
-                ocr_text = clean_text(_ocr_page(page, lang))
-                if len(ocr_text) > len(text):
-                    text, source = ocr_text, "ocr"
-            pages.append(LoadedPage(page_number=idx, text=text, source=source if text else "vacia"))
+            texts[idx] = clean_text(page.get_text("text"))
+            if len(texts[idx]) >= MIN_TEXT_CHARS:
+                continue
+            image = _render_page(page)
+            if image is None:
+                continue
+            while (running := [f for f in ocr.values() if not f.done()]) and len(
+                running
+            ) >= 2 * workers:
+                wait(running, return_when=FIRST_COMPLETED)
+            ocr[idx] = pool.submit(_ocr_image, image, lang)
+    pages: list[LoadedPage] = []
+    for idx, text in texts.items():
+        source = "pdf"
+        if idx in ocr:
+            ocr_text = clean_text(ocr[idx].result())
+            if len(ocr_text) > len(text):
+                text, source = ocr_text, "ocr"
+        pages.append(LoadedPage(page_number=idx, text=text, source=source if text else "vacia"))
     return LoadedDocument(filename=file_path.name, path=file_path, pages=pages)
 
 

@@ -16,6 +16,9 @@
 - **En curso:**
   - **C2 (P0):** Pruebas de integración con el modelo LLM local (Ollama) una vez configurado en la PC cerebro (coordinación con Aaron). Mientras tanto, validado con `FakeListChatModel` en las pruebas unitarias.
 
+- **Recién completado:**
+  - **Classifier (performance):** Enriquecidos `_KEYWORDS` en `classifier.py` con vocabulario real de docs 3B (Predial, Alineamiento, Uso de Suelo, Escrituras). Reducido texto enviado al LLM de 6 000 → 1 200 chars. Objetivo: aumentar confianza heurística ≥ 0.75 para evitar llamadas al LLM y reducir latencia de 10-20 s a < 1 s por doc.
+
 - **Bloqueado por:**
   - Ninguno. La extracción corre tanto de forma heurística como con LLM falso.
 
