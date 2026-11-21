@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, LayoutGroup, MotionConfig, motion } from "motion/react";
 import { Cpu, FilePlus2, Inbox as InboxIcon, Moon, Sun, WifiOff, Workflow } from "lucide-react";
-import type { ApiStatus, Entry } from "./types";
+import type { ApiStatus, Entry, Evidence } from "./types";
 import { analizar, getEjemplo, getStatus } from "./api";
 import { rememberFiles, useBandeja } from "./store";
 import { press, softSpring, spring } from "./anim";
@@ -9,7 +9,7 @@ import { Inbox } from "./components/Inbox";
 import { NewExpediente } from "./components/NewExpediente";
 import { Dictamen } from "./components/Dictamen";
 
-type View = { name: "inbox" } | { name: "new"; id?: string } | { name: "dictamen"; id: string };
+type View = { name: "inbox" } | { name: "new"; id?: string } | { name: "dictamen"; id: string; locate?: Evidence };
 
 function useTheme() {
   const [theme, setTheme] = useState<"light" | "dark">(() => {
@@ -239,7 +239,7 @@ export default function App() {
               initialId={view.id}
               error={error}
               result={doneId ? entries.find((e) => e.id === doneId)?.report : undefined}
-              onOpenResult={() => doneId && go({ name: "dictamen", id: doneId })}
+              onOpenResult={(locate) => doneId && go({ name: "dictamen", id: doneId, locate })}
               onAnalyze={onAnalyze}
               onExample={onExample}
               onCancel={() => go({ name: "inbox" })}
@@ -250,6 +250,7 @@ export default function App() {
             (current?.report ? (
               <Dictamen
                 entry={current}
+                initialLocate={view.locate}
                 onBack={() => go({ name: "inbox" })}
                 onRemove={() => {
                   remove(current.id);

@@ -323,3 +323,43 @@
 }
 
 @media (min-width: 1100px) { .nx-title { white-space: nowrap; } }
+
+/* ---------- Grafo de correlaciones (carga) ---------- */
+.y2k-desk__body { position: relative; }
+.y2k-graph { position: absolute; inset: 0; z-index: 6; display: flex; flex-direction: column; background: var(--desk-bg); }
+.y2k-graph__bar { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 16px; font: 500 12px/1 "JetBrains Mono", monospace; letter-spacing: 0.08em; color: var(--desk-ink-2); }
+.y2k-graph__tag { color: var(--tb-beige); text-transform: uppercase; }
+.y2k-graph__tools { display: flex; gap: 8px; }
+.y2k-graph__tools button, .y2k-graph__pop button {
+  display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 6px; cursor: pointer; border: 1px solid #5a5a5a; background: transparent; color: var(--desk-ink);
+  font: 500 12px/1 "Archivo", sans-serif;
+}
+.y2k-graph__tools button:hover, .y2k-graph__pop button:hover { background: #3a3a3a; }
+.y2k-graph__stage { position: relative; flex: 1; min-height: 0; }
+.y2k-graph__stage svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.y2k-graph__dormant { stroke: #6a6a6a; stroke-width: 1.5; stroke-dasharray: 4 6; }
+.y2k-graph__scan { transform-box: fill-box; transform-origin: center; animation: y2k-ring 2s ease-out infinite; }
+@keyframes y2k-ring { 0% { transform: scale(1); opacity: 0.9; } 100% { transform: scale(2); opacity: 0; } }
+.y2k-graph__n { font: 600 13px "JetBrains Mono", monospace; }
+.y2k-graph__doc { font: 700 14px "Archivo", sans-serif; }
+.y2k-graph__sub, .y2k-graph__edge { font: 500 11px "JetBrains Mono", monospace; }
+.y2k-graph__edge { letter-spacing: 0.04em; paint-order: stroke; stroke: var(--desk-bg); stroke-width: 4px; }
+.y2k-graph__val { font: 500 11px "JetBrains Mono", monospace; paint-order: stroke; stroke: var(--desk-bg); stroke-width: 3px; }
+.y2k-graph__field { cursor: pointer; }
+.y2k-graph__field:focus-visible { outline: 2px solid var(--tb-red); outline-offset: 2px; }
+.y2k-graph__pop {
+  position: absolute; z-index: 3; transform: translate(-50%, 14px); width: min(280px, 80%); display: flex; flex-direction: column; gap: 6px; padding: 12px;
+  border-radius: 8px; background: #1c1c1c; border: 1px solid #5a5a5a; color: var(--desk-ink); font-size: 13px;
+}
+.y2k-graph__pop b { font: 600 11px "JetBrains Mono", monospace; letter-spacing: 0.08em; text-transform: uppercase; color: var(--tb-beige); }
+.y2k-graph__pop q { font: 400 12px/1.4 "JetBrains Mono", monospace; color: var(--desk-ink-2); quotes: none; }
+.y2k-graph__pop-act { display: flex; flex-wrap: wrap; gap: 6px; }
+@media (prefers-reduced-motion: reduce) { .y2k-graph__scan, .y2k-graph__dot { display: none; } }
+@media (max-width: 560px) {
+  .y2k-graph__val { font-size: 14px; stroke-width: 4px; }
+  .y2k-graph__doc { font-size: 17px; }
+  .y2k-graph__n { font-size: 15px; }
+  .y2k-graph__edge, .y2k-graph__sub { display: none; }
+  .y2k-graph__bar { flex-wrap: wrap; }
+}
+@media (min-width: 561px) { .y2k-desk__body { min-height: 470px; } }

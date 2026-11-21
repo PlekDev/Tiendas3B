@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { ArrowLeft, Download, Trash2 } from "lucide-react";
 import { Reveal, bouncy, fadeUp, press, softSpring, stagger, useNarrow } from "../anim";
@@ -28,7 +28,9 @@ export function Dictamen({
   onBack,
   onRemove,
   onUpload,
+  initialLocate,
 }: {
+  initialLocate?: Evidence;
   entry: Entry;
   onBack: () => void;
   onRemove: () => void;
@@ -64,6 +66,10 @@ export function Dictamen({
     setEv(null);
     setLocate((l) => ({ doc: e.document_name, snippet: e.snippet, n: (l?.n ?? 0) + 1 }));
   };
+  useEffect(() => {
+    if (initialLocate) onLocate(initialLocate);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const show = (t?: M.EvTarget) => t && setEv(t);
   const showEv = (e?: Evidence) => e && setEv({ evidence: e });
 

@@ -1,15 +1,17 @@
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import type { DemoCase, DocType, Report } from "../types";
+import type { DemoCase, DocType, Evidence, Report } from "../types";
 import { DOC_LABEL, DOC_ORDER, VERDICT_UI, type Tone } from "../labels";
 import { getCasos } from "../api";
 import { fadeUp, spring, stagger } from "../anim";
 import "../y2k-tokens.css";
 import "./nuevo/y2k.css";
 import { CarpetaDocumento, type Item, type Slot } from "./nuevo/CarpetaDocumento";
-import { BarraBloques, CharolaAnexos, EscritorioY2K } from "./nuevo/EscritorioY2K";
+import { CharolaAnexos, EscritorioY2K } from "./nuevo/EscritorioY2K";
 import { BotonCromado } from "./nuevo/BotonCromado";
 import { Destellos } from "./nuevo/Destellos";
+import { GrafoCorrelacion } from "./nuevo/GrafoCorrelacion";
+import { desbloquearSonido } from "./nuevo/sonido";
 import { HojaVoladora } from "./nuevo/HojaVoladora";
 import { Marquesina } from "./nuevo/Marquesina";
 import { SelloHolografico } from "./nuevo/SelloHolografico";
@@ -64,7 +66,7 @@ export function NewExpediente({
   onAnalyze: (id: string, files: File[], usarLlm: boolean) => void;
   onExample: (caso: string) => void;
   onCancel: () => void;
-  onOpenResult: () => void;
+  onOpenResult: (locate?: Evidence) => void;
   onDismissError: () => void;
 }) {
   const [id, setId] = useState(initialId ?? "");
@@ -79,6 +81,7 @@ export function NewExpediente({
   const [archiving, setArchiving] = useState(false);
   const [announce, setAnnounce] = useState("");
   const [resultBurst, setResultBurst] = useState(0);
+  const [replay, setReplay] = useState<"idle" | "playing" | "done">("idle");
   const [lastExample, setLastExample] = useState<string | null>(null);
   const grid = useRef<HTMLDivElement>(null);
   const alive = useRef(true);
@@ -98,11 +101,16 @@ export function NewExpediente({
     return () => clearInterval(t);
   }, [busy]);
 
+  // Al llegar el dictamen se reproducen los cruces reales en el grafo; la tarjeta de resultado entra al terminar.
   useEffect(() => {
-    if (!result) return;
-    setResultBurst((b) => b + 1);
+    if (!result) return setReplay("idle");
+    setReplay("playing");
     setAnnounce("Dictamen listo");
   }, [result]);
+  const replayDone = () => {
+    setReplay("done");
+    setResultBurst((b) => b + 1);
+  };
 
   /* ---------- colocar / quitar ---------- */
   const place = (slot: Slot, item: Item) => {
@@ -187,6 +195,7 @@ export function NewExpediente({
   /* ---------- ejemplos: se llenan las carpetas una por una ---------- */
   const runExample = async (c: DemoCase) => {
     if (busy || filling) return;
+    desbloquearSonido();
     setFilling(true);
     setSlots({});
     setAnnex([]);
@@ -235,7 +244,10 @@ export function NewExpediente({
             ? `▸ Esperando 4 documentos · ${iaTxt}`
             : `▸ ${n} de 4 carpetas con documento${annex.length ? ` · ${annex.length} anexo${annex.length > 1 ? "s" : ""}` : ""} · ${iaTxt}`;
 
-  const analyze = () => onAnalyze(finalId, files, aiOn);
+  const analyze = () => {
+    desbloquearSonido();
+    onAnalyze(finalId, files, aiOn);
+  };
 
   const archive = () => {
     const g = grid.current;
@@ -278,12 +290,19 @@ export function NewExpediente({
         bloqueado={locked}
         onDropFiles={distribute}
         footer={
-          <>
-            <BarraBloques llenos={llenos} activa={busy} />
-            <Marquesina texto={marquee} />
-          </>
+<Marquesina texto={marquee} />
         }
       >
+        {(busy || (result && replay === "playing")) && (
+          <GrafoCorrelacion
+            presentes={Object.fromEntries(SLOTS.map((s, i) => [s, llenos[i]])) as Record<Slot, boolean>}
+            paso={step}
+            pasos={STEPS}
+            report={busy ? undefined : result}
+            onDone={replayDone}
+            onLocate={(e) => onOpenResult(e)}
+          />
+        )}
         <div className="y2k-desk__layout">
           <div className="y2k-grid" ref={grid}>
             {SLOTS.map((s, i) => (
@@ -377,7 +396,7 @@ export function NewExpediente({
       </div>
 
       <AnimatePresence>
-        {result && !busy && (
+        {result && !busy && replay === "done" && (
           <motion.section
             className="y2k-result"
             aria-label="Resultado del análisis"
@@ -412,7 +431,7 @@ export function NewExpediente({
               <BotonCromado primario onClick={archive} disabled={archiving}>
                 Archivar en la bandeja
               </BotonCromado>
-              <button type="button" className="y2k-link" onClick={onOpenResult}>
+              <button type="button" className="y2k-link" onClick={() => onOpenResult()}>
                 Ver el dictamen completo
               </button>
             </div>
