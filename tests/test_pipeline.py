@@ -49,19 +49,42 @@ def test_pipeline_survives_a_broken_llm() -> None:
 
 
 def test_pipeline_uses_llm_extraction_when_valid() -> None:
+    from tiendas3b.ingestion.pdf_loader import LoadedDocument, LoadedPage
+
+    docs = demo_documents("cumple")
+    prose_docs = [
+        LoadedDocument(
+            filename=d.filename,
+            path=d.path,
+            pages=[
+                LoadedPage(
+                    page_number=p.page_number,
+                    text=p.text.replace(
+                        "Cuenta predial: 114-002-007-000",
+                        "Inscrito bajo el padrón municipal número 114-002-007-000 vigente",
+                    ),
+                    source=p.source,
+                )
+                for p in d.pages
+            ],
+        )
+        if d.filename == "predial.pdf"
+        else d
+        for d in docs
+    ]
     answer = json.dumps(
         {
             "campos": {
                 "cuenta_predial": {
                     "valor": "114-002-007-000",
                     "pagina": 1,
-                    "cita": "Cuenta predial: 114-002-007-000",
+                    "cita": "Inscrito bajo el padrón municipal número 114-002-007-000 vigente",
                 }
             }
         }
     )
     llm = FakeListChatModel(responses=[answer] * 10)
-    report = analyze_expediente("X", demo_documents("cumple"), llm=llm)
+    report = analyze_expediente("X", prose_docs, llm=llm)
     predial = next(a for a in report.document_analyses if a.document_name == "predial.pdf")
     cuenta = next(f for f in predial.extracted_fields if f.name == "cuenta_predial")
     assert cuenta.method == "llm"
@@ -99,7 +122,6 @@ def test_retry_recovers_multiline_field_with_llm_active() -> None:
                     "Contribuyente\n"
                     "Inmobiliaria Reforma S.A. de C.V.\n"
                     "Ubicación del predio: Av. Reforma 100\n"
-                    "Cuenta predial: 114-002-007-000\n"
                     "Superficie de terreno: 850 m2\n"
                 ),
             )

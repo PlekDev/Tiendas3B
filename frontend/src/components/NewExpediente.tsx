@@ -1,13 +1,24 @@
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import type { DemoCase, DocType } from "../types";
-import { DOC_LABEL, DOC_ORDER, type Tone } from "../labels";
+import type { DemoCase, DocType, Evidence, Report } from "../types";
+import { DOC_LABEL, DOC_ORDER, VERDICT_UI, type Tone } from "../labels";
 import { getCasos } from "../api";
-import { Chip } from "./Bits";
-import { FileText, Sparkles, UploadCloud } from "lucide-react";
-import { fadeUp, press, spring, stagger } from "../anim";
+import { fadeUp, spring, stagger } from "../anim";
+import "../y2k-tokens.css";
+import "./nuevo/y2k.css";
+import { CarpetaDocumento, type Item, type Slot } from "./nuevo/CarpetaDocumento";
+import { CharolaAnexos, EscritorioY2K } from "./nuevo/EscritorioY2K";
+import { BotonCromado } from "./nuevo/BotonCromado";
+import { Destellos } from "./nuevo/Destellos";
+import { GrafoCorrelacion } from "./nuevo/GrafoCorrelacion";
+import { desbloquearSonido } from "./nuevo/sonido";
+import { HojaVoladora } from "./nuevo/HojaVoladora";
+import { Marquesina } from "./nuevo/Marquesina";
+import { SelloHolografico } from "./nuevo/SelloHolografico";
 
 const STEPS = ["Clasificador", "Extractores", "Validador", "Cruces", "Dictamen"];
+const SLOTS = DOC_ORDER as Slot[];
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** Pista por nombre de archivo. El tipo real lo decide el Clasificador al analizar. */
 function guessType(name: string): DocType | null {
@@ -19,11 +30,6 @@ function guessType(name: string): DocType | null {
   return null;
 }
 
-function size(bytes: number): string {
-  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-}
-
 const EXAMPLE_TONE: Record<string, [Tone, string]> = {
   cumple: ["ok", "Cumple"],
   revision: ["warn", "Revisión"],
@@ -31,35 +37,61 @@ const EXAMPLE_TONE: Record<string, [Tone, string]> = {
   incompleto: ["miss", "Incompleto"],
 };
 
+const bloqueantes = (r: Report) =>
+  r.cross_validation_issues.filter((i) => i.severity === "critical").length +
+  r.document_analyses.reduce((n, a) => n + a.rule_evaluations.filter((x) => !x.passed && x.severity === "critical").length, 0);
+
+type Flight = { id: number; name: string; from: { x: number; y: number }; to: { x: number; y: number }; delay: number; done: () => void };
+let flightId = 0;
+
 export function NewExpediente({
   busy,
   aiAvailable,
+  offline = false,
   initialId,
   error,
+  result,
   onAnalyze,
   onExample,
   onCancel,
+  onOpenResult,
   onDismissError,
 }: {
   busy: boolean;
   aiAvailable: boolean;
+  offline?: boolean;
   initialId?: string;
   error: string | null;
+  result?: Report;
   onAnalyze: (id: string, files: File[], usarLlm: boolean) => void;
   onExample: (caso: string) => void;
   onCancel: () => void;
+  onOpenResult: (locate?: Evidence) => void;
   onDismissError: () => void;
 }) {
   const [id, setId] = useState(initialId ?? "");
-  const [files, setFiles] = useState<File[]>([]);
+  const [slots, setSlots] = useState<Partial<Record<Slot, Item>>>({});
+  const [annex, setAnnex] = useState<Item[]>([]);
+  const [doubts, setDoubts] = useState<Partial<Record<Slot, Slot>>>({});
+  const [flights, setFlights] = useState<Flight[]>([]);
   const [ai, setAi] = useState(true);
   const [casos, setCasos] = useState<DemoCase[] | null>(null);
-  const [drag, setDrag] = useState(false);
   const [step, setStep] = useState(0);
-  const input = useRef<HTMLInputElement>(null);
+  const [filling, setFilling] = useState(false);
+  const [archiving, setArchiving] = useState(false);
+  const [announce, setAnnounce] = useState("");
+  const [resultBurst, setResultBurst] = useState(0);
+  const [replay, setReplay] = useState<"idle" | "playing" | "done">("idle");
+  const [lastExample, setLastExample] = useState<string | null>(null);
+  const grid = useRef<HTMLDivElement>(null);
+  const alive = useRef(true);
 
   useEffect(() => {
+    alive.current = true;
     getCasos().then(setCasos).catch(() => setCasos([]));
+    return () => {
+      alive.current = false;
+    };
   }, []);
 
   // No hay cola todavía (A4): el avance es indicativo mientras el servidor responde.
@@ -69,281 +101,380 @@ export function NewExpediente({
     return () => clearInterval(t);
   }, [busy]);
 
-  const add = (list: FileList | null) => {
-    if (!list) return;
-    const incoming = Array.from(list);
-    setFiles((prev) => [...prev, ...incoming.filter((f) => !prev.some((p) => p.name === f.name))]);
+  // Al llegar el dictamen se reproducen los cruces reales en el grafo; la tarjeta de resultado entra al terminar.
+  useEffect(() => {
+    if (!result) return setReplay("idle");
+    setReplay("playing");
+    setAnnounce("Dictamen listo");
+  }, [result]);
+  const replayDone = () => {
+    setReplay("done");
+    setResultBurst((b) => b + 1);
   };
 
-  const guessed = files.map((f) => guessType(f.name));
-  const missing = DOC_ORDER.filter((t) => !guessed.includes(t));
+  /* ---------- colocar / quitar ---------- */
+  const place = (slot: Slot, item: Item) => {
+    setSlots((p) => ({ ...p, [slot]: item }));
+    const g = guessType(item.name);
+    setDoubts((p) => {
+      const n = { ...p };
+      if (g && g !== "desconocido" && g !== slot) n[slot] = g as Slot;
+      else delete n[slot];
+      return n;
+    });
+    setAnnounce(`${DOC_LABEL[slot]} recibida`);
+  };
+  const addAnnex = (item: Item) => {
+    setAnnex((p) => (p.some((a) => a.name === item.name) ? p : [...p, item]));
+    setAnnounce(`${item.name} guardado en anexos`);
+  };
+  const toItem = (f: File): Item => ({ name: f.name, size: f.size, file: f });
+  const removeSlot = (s: Slot) => {
+    setSlots((p) => {
+      const n = { ...p };
+      delete n[s];
+      return n;
+    });
+    setDoubts((p) => {
+      const n = { ...p };
+      delete n[s];
+      return n;
+    });
+    setAnnounce(`${DOC_LABEL[s]} quitada`);
+  };
+  const moveSlot = (from: Slot) => {
+    const to = doubts[from];
+    const it = slots[from];
+    if (!to || !it) return;
+    const other = slots[to];
+    removeSlot(from);
+    place(to, it);
+    if (other) place(from, other);
+  };
+
+  /** Soltar varios archivos fuera de una carpeta: cada hoja vuela a su carpeta (o a Anexos), 150 ms entre una y otra. */
+  const distribute = (files: File[], from: { x: number; y: number }) => {
+    const taken = new Set<Slot>(SLOTS.filter((s) => slots[s]));
+    const fl: Flight[] = [];
+    files.forEach((f, i) => {
+      const g = guessType(f.name);
+      const slot = g && g !== "desconocido" && !taken.has(g as Slot) ? (g as Slot) : null;
+      if (slot) taken.add(slot);
+      const target = document.querySelector(slot ? `[data-slot="${slot}"] .y2k-carp__back` : "[data-anexos]");
+      const r = target?.getBoundingClientRect();
+      const to = r ? { x: r.left + r.width / 2, y: r.top + r.height / 2 } : from;
+      const item = toItem(f);
+      const flight: Flight = {
+        id: ++flightId,
+        name: f.name,
+        from,
+        to,
+        delay: i * 0.15,
+        done: () => {
+          if (!alive.current) return;
+          setFlights((p) => p.filter((x) => x.id !== flight.id));
+          slot ? place(slot, item) : addAnnex(item);
+        },
+      };
+      fl.push(flight);
+    });
+    setFlights((p) => [...p, ...fl]);
+  };
+
+  /** Archivos soltados o elegidos en una carpeta: el primero va ahí; el resto se reparte. */
+  const pickInto = (slot: Slot, files: File[]) => {
+    if (!files.length) return;
+    place(slot, toItem(files[0]));
+    const rest = files.slice(1);
+    if (rest.length) {
+      const r = grid.current?.getBoundingClientRect();
+      distribute(rest, r ? { x: r.left + r.width / 2, y: r.top + 40 } : { x: 200, y: 200 });
+    }
+  };
+
+  /* ---------- ejemplos: se llenan las carpetas una por una ---------- */
+  const runExample = async (c: DemoCase) => {
+    if (busy || filling) return;
+    desbloquearSonido();
+    setFilling(true);
+    setSlots({});
+    setAnnex([]);
+    setDoubts({});
+    setLastExample(c.caso);
+    for (const name of c.documentos) {
+      await sleep(320);
+      if (!alive.current) return;
+      const g = guessType(name);
+      g && g !== "desconocido" ? place(g as Slot, { name }) : addAnnex({ name });
+    }
+    await sleep(700);
+    if (!alive.current) return;
+    setFilling(false);
+    onExample(c.caso);
+  };
+
+  /* ---------- derivados (misma lógica que antes: un arreglo plano de archivos) ---------- */
+  const files = [...SLOTS.map((s) => slots[s]?.file), ...annex.map((a) => a.file)].filter((f): f is File => !!f);
+  const llenos = SLOTS.map((s) => !!slots[s]);
+  const n = llenos.filter(Boolean).length;
+  const faltan = 4 - n;
   const aiOn = aiAvailable && ai;
   const finalId = id.trim() || `EXP-${new Date().toISOString().slice(0, 10)}`;
+  const locked = busy || filling || archiving;
+  const canRun = files.length > 0 && !locked;
+
+  const mensaje =
+    n === 0
+      ? "Coloca al menos un documento"
+      : faltan > 0
+        ? `Faltan ${faltan} carpeta${faltan > 1 ? "s" : ""}; se marcará como incompleto`
+        : "Las cuatro carpetas están listas";
+
+  const iaTxt = offline ? "Sin conexión con la API" : aiOn ? "IA conectada" : "Sin IA · reglas y patrones";
+  const leyendo = SLOTS.filter((s) => slots[s]).map((s) => DOC_LABEL[s]);
+  const marquee = archiving
+    ? "▸ Archivando expediente en la bandeja…"
+    : busy
+      ? `▸ Leyendo ${leyendo.length ? leyendo.join("… ") + "…" : "expediente…"} · ${STEPS[step]} · ${iaTxt}`
+      : result
+        ? `▸ Dictamen listo · ${result.recommendation} · ${(result.processing_ms / 1000).toFixed(1)} s · ${iaTxt}`
+        : filling
+          ? "▸ Cargando ejemplo, carpeta por carpeta…"
+          : n === 0
+            ? `▸ Esperando 4 documentos · ${iaTxt}`
+            : `▸ ${n} de 4 carpetas con documento${annex.length ? ` · ${annex.length} anexo${annex.length > 1 ? "s" : ""}` : ""} · ${iaTxt}`;
+
+  const analyze = () => {
+    desbloquearSonido();
+    onAnalyze(finalId, files, aiOn);
+  };
+
+  const archive = () => {
+    const g = grid.current;
+    if (!g) return onCancel();
+    const gr = g.getBoundingClientRect();
+    g.querySelectorAll<HTMLElement>(".y2k-slot").forEach((el) => {
+      const r = el.getBoundingClientRect();
+      el.style.setProperty("--dx", `${gr.left + gr.width / 2 - (r.left + r.width / 2)}px`);
+      el.style.setProperty("--dy", `${gr.top + gr.height / 2 - (r.top + r.height / 2)}px`);
+    });
+    setArchiving(true);
+    setAnnounce("Archivando en la bandeja");
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    setTimeout(onCancel, reduce ? 250 : 1300);
+  };
 
   return (
-    <main className="page new" data-screen-label="Nuevo expediente">
-      <div>
-        <button className="back" onClick={onCancel}>
-          ← Bandeja
+    <main className="page new nx" data-screen-label="Nuevo expediente">
+      <p className="y2k-sr" aria-live="polite">
+        {announce}
+      </p>
+
+      <header className="nx-head">
+        <div className="nx-head__l">
+          <button className="nx-back" onClick={onCancel}>
+            [ ← BANDEJA ]
+          </button>
+          <h1 className="nx-title">
+            Cuatro carpetas. <em className="y2k-chrome-text">Un dictamen.</em>
+          </h1>
+          <p className="nx-lede">Coloca cada documento en su carpeta. El Clasificador confirma el tipo al analizar.</p>
+        </div>
+        <label className="nx-id">
+          <span>ID DEL EXPEDIENTE</span>
+          <input value={id} onChange={(e) => setId(e.target.value)} placeholder={finalId} autoComplete="off" spellCheck={false} />
+        </label>
+      </header>
+
+      <EscritorioY2K
+        bloqueado={locked}
+        onDropFiles={distribute}
+        footer={
+<Marquesina texto={marquee} />
+        }
+      >
+        {(busy || (result && replay === "playing")) && (
+          <GrafoCorrelacion
+            presentes={Object.fromEntries(SLOTS.map((s, i) => [s, llenos[i]])) as Record<Slot, boolean>}
+            paso={step}
+            pasos={STEPS}
+            report={busy ? undefined : result}
+            onDone={replayDone}
+            onLocate={(e) => onOpenResult(e)}
+          />
+        )}
+        <div className="y2k-desk__layout">
+          <div className="y2k-grid" ref={grid}>
+            {SLOTS.map((s, i) => (
+              <CarpetaDocumento
+                key={s}
+                index={i}
+                tipo={s}
+                item={slots[s] ?? null}
+                duda={doubts[s] ?? null}
+                analizando={busy}
+                bloqueada={locked}
+                archivando={archiving}
+                onPick={(f) => pickInto(s, f)}
+                onRemove={() => removeSlot(s)}
+                onMove={() => moveSlot(s)}
+              />
+            ))}
+          </div>
+          <CharolaAnexos
+            anexos={annex}
+            bloqueada={locked}
+            onRemove={(i) => setAnnex((p) => p.filter((_, j) => j !== i))}
+          />
+        </div>
+      </EscritorioY2K>
+
+      {flights.map((f) => (
+        <HojaVoladora key={f.id} delay={f.delay} vuelo={{ from: f.from, to: f.to, onDone: f.done }} />
+      ))}
+
+      <div className="nx-ai">
+        <button
+          type="button"
+          className={`y2k-switch${aiOn ? " is-on" : ""}`}
+          role="switch"
+          aria-checked={aiOn}
+          aria-label="Usar el modelo de IA"
+          disabled={!aiAvailable || locked}
+          onClick={() => setAi(!ai)}
+        >
+          <motion.span className="y2k-switch__knob" layout transition={{ type: "spring", stiffness: 600, damping: 26 }} />
         </button>
-        <h1 className="h1" style={{ marginTop: 8 }}>
-          Nuevo expediente
-        </h1>
+        <div>
+          <b>Usar el modelo de IA</b>
+          <span>
+            {!aiAvailable
+              ? "El modelo no está disponible ahora. Se analizará con reglas y patrones."
+              : aiOn
+                ? "Lee los documentos con el modelo de IA y verifica cada dato con reglas."
+                : "Se analizará solo con reglas y patrones."}
+          </span>
+        </div>
       </div>
 
-      <div className="new__grid">
-      <motion.section className="panel-card" variants={fadeUp} initial="hidden" animate="show">
-        <label className="field">
-          ID del expediente
-          <input
-            className="input"
-            value={id}
-            onChange={(e) => setId(e.target.value)}
-            placeholder={finalId}
-            style={{ fontWeight: 400 }}
-          />
-        </label>
-
-        <motion.button
-          className={`drop${drag ? " is-on" : ""}`}
-          animate={{ scale: drag ? 1.02 : 1 }}
-          whileHover={{ scale: 1.01 }}
-          whileTap={{ scale: 0.98 }}
-          transition={spring}
-          onClick={() => input.current?.click()}
-          onDragOver={(e) => {
-            e.preventDefault();
-            setDrag(true);
-          }}
-          onDragLeave={() => setDrag(false)}
-          onDrop={(e) => {
-            e.preventDefault();
-            setDrag(false);
-            add(e.dataTransfer.files);
-          }}
-        >
-          <motion.span
-            className="drop__icon"
-            animate={drag ? { y: [0, -8, 0] } : { y: 0 }}
-            transition={drag ? { repeat: Infinity, duration: 0.8 } : spring}
-          >
-            <UploadCloud size={40} strokeWidth={1.8} aria-hidden />
-          </motion.span>
-          <span style={{ fontWeight: 600 }}>Arrastra aquí los PDF o imágenes del expediente</span>
-          <span className="small muted">o toca para elegir archivos · PDF, JPG, PNG</span>
-        </motion.button>
-        <input
-          ref={input}
-          type="file"
-          multiple
-          hidden
-          accept=".pdf,.jpg,.jpeg,.png,.tif,.tiff"
-          onChange={(e) => {
-            add(e.target.files);
-            e.target.value = "";
-          }}
-        />
-
-        {files.length > 0 && (
-          <div className="files">
-            <AnimatePresence initial={false}>
-              {files.map((f, i) => {
-                const t = guessed[i];
-                return (
-                  <motion.div
-                    key={f.name}
-                    className="file"
-                    layout
-                    initial={{ opacity: 0, y: -12, scale: 0.96 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, x: 40, transition: { duration: 0.18 } }}
-                    transition={spring}
-                  >
-                    <FileText size={22} className="faint" aria-hidden style={{ flex: "none" }} />
-                    <span className="file__name">
-                      {f.name} <span className="faint" style={{ fontWeight: 400 }}>· {size(f.size)}</span>
-                    </span>
-                    {t ? (
-                      <Chip tone="neutral" icon="~">
-                        Parece {DOC_LABEL[t]}
-                      </Chip>
-                    ) : (
-                      <Chip tone="neutral">Se identifica al analizar</Chip>
-                    )}
-                    <button
-                      className="iconbtn"
-                      aria-label={`Quitar ${f.name}`}
-                      onClick={() => setFiles((p) => p.filter((x) => x.name !== f.name))}
-                    >
-                      ✕
-                    </button>
-                  </motion.div>
-                );
-              })}
-            </AnimatePresence>
-          </div>
-        )}
-
-        {error && (
-          <div className="alert" role="alert">
-            <div className="alert__row">
-              <span style={{ color: "var(--bad)", fontWeight: 600, fontSize: 14 }}>
-                No pudimos completar el análisis
-              </span>
-              <span className="chips">
-                <button
-                  className="btn btn--bad"
-                  disabled={busy || !files.length}
-                  onClick={() => onAnalyze(finalId, files, aiOn)}
-                >
-                  Reintentar
-                </button>
-                <button className="btn" onClick={onDismissError}>
-                  Cerrar
-                </button>
-              </span>
-            </div>
-            <span className="small muted">
-              Revisa que los archivos no estén protegidos o dañados y que la API esté encendida.
-              {!files.length && " Vuelve a elegir los archivos para reintentar."}
-            </span>
-            <details>
-              <summary>Detalle técnico</summary>
-              <code>{error}</code>
-            </details>
-          </div>
-        )}
-
-        <div className="sec" style={{ gap: 8 }}>
-          <span className="small muted" style={{ fontWeight: 600 }}>
-            Lo que esperamos recibir
-          </span>
-          <div className="chips">
-            {DOC_ORDER.map((t) =>
-              guessed.includes(t) ? (
-                <Chip key={t} tone="ok" size="lg">
-                  {DOC_LABEL[t]} · Parece incluido
-                </Chip>
-              ) : (
-                <Chip key={t} tone="miss" size="lg">
-                  {DOC_LABEL[t]} · No se ve
-                </Chip>
-              ),
-            )}
-          </div>
-          <span className="small faint">
-            Se adivina por el nombre del archivo; el Clasificador lo confirma al analizar.
-          </span>
-        </div>
-
-        <div className="switch-row">
-          <button
-            className="switch"
-            role="switch"
-            aria-checked={aiOn}
-            aria-label="Usar el modelo de IA"
-            disabled={!aiAvailable}
-            onClick={() => setAi(!ai)}
-          >
-            <motion.span className="switch__knob" layout transition={{ type: "spring", stiffness: 600, damping: 35 }} />
-          </button>
-          <div className="sec" style={{ gap: 2 }}>
-            <span style={{ fontWeight: 600 }}>Usar el modelo de IA</span>
-            <span className="small muted">
-              {!aiAvailable
-                ? "El modelo no está disponible ahora. Se analizará con reglas y patrones."
-                : aiOn
-                  ? "Lee los documentos con el modelo de IA y verifica cada dato con reglas."
-                  : "Se analizará solo con reglas y patrones."}
+      {error && (
+        <div className="alert" role="alert">
+          <div className="alert__row">
+            <span style={{ color: "var(--bad)", fontWeight: 600, fontSize: 14 }}>No pudimos completar el análisis</span>
+            <span className="chips">
+              <button
+                className="btn btn--bad"
+                disabled={locked || (!files.length && !lastExample)}
+                onClick={() => (files.length ? analyze() : lastExample && onExample(lastExample))}
+              >
+                Reintentar
+              </button>
+              <button className="btn" onClick={onDismissError}>
+                Cerrar
+              </button>
             </span>
           </div>
-        </div>
-
-        <div className="new__actions">
-          <motion.button
-            className="btn btn--primary btn--lg btn--cta"
-            disabled={busy || !files.length}
-            onClick={() => onAnalyze(finalId, files, aiOn)}
-            {...press}
-          >
-            <Sparkles size={20} aria-hidden />
-            {busy ? "Analizando…" : "Analizar"}
-          </motion.button>
           <span className="small muted">
-            {!files.length
-              ? "Agrega al menos un archivo."
-              : missing.length
-                ? `Parece faltar ${missing.map((t) => DOC_LABEL[t]).join(", ")}. Puedes analizar y subirlo después.`
-                : "Listo para analizar."}
+            Revisa que los archivos no estén protegidos o dañados y que la API esté encendida.
+            {!files.length && !lastExample && " Vuelve a colocar los archivos para reintentar."}
           </span>
+          <details>
+            <summary>Detalle técnico</summary>
+            <code>{error}</code>
+          </details>
         </div>
+      )}
 
-        <AnimatePresence>
-          {busy && (
-            <motion.div
-              className="run"
-              aria-live="polite"
-              initial={{ opacity: 0, y: -6 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0 }}
-            >
-              <div className="alert__row" style={{ background: "none" }}>
-                <span style={{ fontWeight: 600 }}>Analizando · {STEPS[step]}</span>
-                <span className="small muted">Paso {step + 1} de 5 · avance aproximado</span>
-              </div>
-              <div className="chips" style={{ gap: 6 }}>
-                {STEPS.map((s, i) => (
-                  <span key={s} className={`chip step${i < step ? " is-done" : i === step ? " is-now" : ""}`}>
-                    <span className="dot dot--ring" aria-hidden>
-                      {i < step ? "✓" : i + 1}
-                    </span>
-                    {s}
-                  </span>
-                ))}
-              </div>
-              <div className="progress">
-                <motion.div
-                  className="progress__fill"
-                  animate={{ width: `${((step + 1) / STEPS.length) * 92}%` }}
-                  transition={{ type: "spring", stiffness: 60, damping: 18 }}
-                />
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </motion.section>
+      <div className="nx-action">
+        <p className="nx-action__msg" aria-live="polite">
+          <span className={`nx-dot${n === 4 ? " is-ok" : n > 0 ? " is-part" : ""}`} aria-hidden />
+          {mensaje}
+        </p>
+        <BotonCromado primario disabled={!canRun} onClick={analyze}>
+          {busy ? "Analizando…" : `Analizar ${n} de 4 →`}
+        </BotonCromado>
+      </div>
 
-      <aside className="sec new__aside" style={{ gap: 12 }}>
-        <h2 className="h2">O prueba con un ejemplo</h2>
-        <motion.div className="examples" variants={stagger(0.07, 0.15)} initial="hidden" animate={casos ? "show" : "hidden"}>
+      <AnimatePresence>
+        {result && !busy && replay === "done" && (
+          <motion.section
+            className="y2k-result"
+            aria-label="Resultado del análisis"
+            initial={{ opacity: 0, y: 90 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 40 }}
+            transition={{ type: "spring", stiffness: 190, damping: 20 }}
+          >
+            <Destellos fire={resultBurst} n={8} className="y2k-sparks--result" />
+            <SelloHolografico grande tono={toneOf(result)} rotate={-8}>
+              {VERDICT_UI[result.recommendation].short.toUpperCase()}
+            </SelloHolografico>
+            <dl className="y2k-result__facts">
+              <div>
+                <dt>Expediente</dt>
+                <dd className="mono">{result.expediente_id}</dd>
+              </div>
+              <div>
+                <dt>Confianza</dt>
+                <dd className="mono">{Math.round(result.confidence * 100)} %</dd>
+              </div>
+              <div>
+                <dt>Bloqueantes</dt>
+                <dd className="mono">{bloqueantes(result)}</dd>
+              </div>
+              <div>
+                <dt>Tiempo</dt>
+                <dd className="mono">{(result.processing_ms / 1000).toFixed(1)} s</dd>
+              </div>
+            </dl>
+            <div className="y2k-result__act">
+              <BotonCromado primario onClick={archive} disabled={archiving}>
+                Archivar en la bandeja
+              </BotonCromado>
+              <button type="button" className="y2k-link" onClick={() => onOpenResult()}>
+                Ver el dictamen completo
+              </button>
+            </div>
+          </motion.section>
+        )}
+      </AnimatePresence>
+
+      <section className="nx-examples">
+        <h2 className="nx-sub">
+          <span className="mono">[ ✦ ]</span> O prueba con un ejemplo
+        </h2>
+        <motion.div className="nx-examples__grid" variants={stagger(0.07, 0.1)} initial="hidden" animate={casos ? "show" : "hidden"}>
           {casos?.map((c) => {
-            const [tone, label] = EXAMPLE_TONE[c.caso] ?? ["neutral", c.esperado];
+            const [tone, label] = EXAMPLE_TONE[c.caso] ?? ["miss", c.esperado];
+            const count = new Set(c.documentos.map(guessType).filter(Boolean)).size;
             return (
               <motion.button
                 key={c.caso}
+                type="button"
                 variants={fadeUp}
-                className={`example t-${tone}`}
-                disabled={busy}
-                onClick={() => onExample(c.caso)}
+                className={`y2k-ex t-${tone}`}
+                disabled={locked}
+                onClick={() => void runExample(c)}
                 whileHover={{ y: -4, transition: spring }}
                 whileTap={{ scale: 0.97 }}
               >
-                <Chip tone={tone}>{label}</Chip>
-                <span className="mono" style={{ fontSize: 13, fontWeight: 500 }}>
-                  {c.expediente_id}
-                </span>
-                <span className="small muted pretty">{c.descripcion}</span>
+                <span className="y2k-ex__tab mono">{c.expediente_id}</span>
+                <span className="y2k-ex__stamp">{label}</span>
+                <span className="y2k-ex__desc">{c.descripcion}</span>
+                <span className="y2k-ex__count mono">{count} / 4 documentos</span>
               </motion.button>
             );
           })}
         </motion.div>
         {casos && !casos.length && (
-          <p className="small muted">
-            No se pudo cargar la lista de ejemplos. ¿Está corriendo la API (make api)?
-          </p>
+          <p className="small muted">No se pudo cargar la lista de ejemplos. ¿Está corriendo la API (make api)?</p>
         )}
-      </aside>
-      </div>
+      </section>
     </main>
   );
+}
+
+function toneOf(r: Report): "ok" | "warn" | "bad" {
+  const c = VERDICT_UI[r.recommendation].cls;
+  return c === "ok" ? "ok" : c === "bad" ? "bad" : "warn";
 }

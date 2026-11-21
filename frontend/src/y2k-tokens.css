@@ -1,0 +1,33 @@
+/* Paleta Tiendas 3B: rojo #DD2430, negro #262626, beige #F4DA9F.
+   Tokens Y2K corporativo (cromo, holográfico, vidrio). Viven junto a los del sistema (index.css)
+   para llevar el mismo acabado a la Bandeja. El rojo 3B sigue siendo el ancla. */
+:root,
+[data-theme="light"] {
+  --tb-red: #DD2430;
+  --tb-black: #262626;
+  --tb-beige: #F4DA9F;
+  --y2k-red: var(--tb-red);
+  --y2k-red-deep: #A3151F;
+  --y2k-green: oklch(0.52 0.14 150);
+  --y2k-green-ink: oklch(0.4 0.12 150);
+  --y2k-amber: oklch(0.8 0.14 80);
+  --manila-back: #E6C987;
+  --manila-front: var(--tb-beige);
+  --manila-ink: var(--tb-black);
+  --manila-ink-2: #5B4A26;
+
+  --chrome: linear-gradient(135deg, #f4f6fa 0%, #b9c0cc 38%, #eef1f6 62%, #8d95a3 100%);
+  --holo: conic-gradient(from 0deg, #66e3f2, #b79cff, #ff8fc7, #ffc4a3, #66e3f2);
+  --glass-bg: rgb(255 255 255 / 0.14);
+  --glass-blur: blur(14px) saturate(160%);
+  --glass-border: 1px solid rgb(255 255 255 / 0.35);
+
+  /* Texto cromado: solo tamaños grandes. Base oscura sobre papel claro. */
+  --chrome-text: linear-gradient(100deg, #262626 0%, #4a4a4a 28%, #8a8a8a 42%, #4a4a4a 56%, #DD2430 78%, #B81C27 100%);
+  --desk-bg: var(--tb-black);
+  --desk-ink: #FBF6EA;
+  --desk-ink-2: #D9D2C3;
+}
+[data-theme="dark"] {
+  --chrome-text: linear-gradient(100deg, #ffffff 0%, #d5dae3 28%, #ffffff 42%, #c3c9d4 56%, #F25D66 78%, #E8404B 100%);
+}
