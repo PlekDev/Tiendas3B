@@ -39,8 +39,8 @@ Más: `make api` (API en http://127.0.0.1:8000/docs), `make evaluar`, `make demo
 
 | Pieza | Estado | Dónde | Dueño |
 |---|---|---|---|
-| Ingesta PyMuPDF + OCR de respaldo | Funciona con PDFs de texto. **OCR sin probar con escaneos reales** | `ingestion/pdf_loader.py` | Diego |
-| Clasificador | Palabras clave + LLM cuando duda. Confianza y `desconocido` | `agents/classifier.py` | Diego |
+| Ingesta PyMuPDF + OCR de respaldo | Funciona con PDFs de texto. **OCR sin probar con escaneos reales** | `ingestion/pdf_loader.py` | Victor |
+| Clasificador | Palabras clave + LLM cuando duda. Confianza y `desconocido` | `agents/classifier.py` | Victor |
 | Extractores | Heurística por encabezados + LLM con **cita verificada contra el texto**. Encabezados genéricos, sin afinar con documentos reales | `agents/extractor.py`, `agents/extractor_fields.py` | Carlos |
 | Reglas | Cartuchos JSON por tipo, 6 tipos de regla, sin tocar código | `data/rules/*.json`, `rules/engine.py` | Andrés |
 | Cruces | Los 5 cruces + "posible inmueble diferente". Umbrales provisionales | `agents/cross_validator.py`, `rules/criteria.py` | Andrés |
@@ -49,7 +49,8 @@ Más: `make api` (API en http://127.0.0.1:8000/docs), `make evaluar`, `make demo
 | API | `status`, `casos`, `ejemplo`, `analizar`, `grafo`. Borra los archivos al terminar | `api/main.py` | Aaron |
 | CLI y evaluación | `analizar`, `ejemplo`, `evaluar`, `estado`, `grafo`, `api` | `cli.py`, `evaluacion.py` | Aaron / Andrés |
 | Expedientes ficticios | 4 casos (cumple, revisión, no cumple, incompleto) para trabajar sin datos de 3B | `demo.py` | Todos |
-| Interfaz | **Pendiente** | `frontend/` | Victor |
+| Interfaz (dashboard) | **Pendiente**. Guía lista en [docs/GUIA_DASHBOARD.md](docs/GUIA_DASHBOARD.md) | `frontend/` | Diego |
+| Logs y bitácora de auditoría | **Pendiente**. Hoy solo hay `logging` básico | `logs.py` (por crear) | Victor |
 | Cola de trabajos / modo servidor | **Pendiente** | `api/` | Aaron |
 | CI/CD y seguridad | CI actual pasa. Mejoras **pendientes** | `.github/workflows/` | Aaron |
 
@@ -62,10 +63,10 @@ Más: `make api` (API en http://127.0.0.1:8000/docs), `make evaluar`, `make demo
 | Persona | Responsable de | Archivos (bajo `src/tiendas3b/` salvo indicación) |
 |---|---|---|
 | **Aaron** | Contrato de datos, grafo, LLM, API, modo servidor, CI/CD, seguridad, integración | `models/schemas.py`, `agents/orchestrator.py`, `llm.py`, `config.py`, `api/`, `cli.py`, `pyproject.toml`, `.github/`, `README.md`, `docs/` |
-| **Diego** | Ingesta + OCR, clasificador, armar expedientes desde los ZIP, ambiente de las laptops | `ingestion/`, `agents/classifier.py` |
+| **Diego** (autor de TrustNode) | Interfaz: el dashboard a partir del frontend de TrustNode | `frontend/` (por crear), `ui/`, `docs/GUIA_DASHBOARD.md` |
 | **Carlos** | Los 4 extractores y sus prompts | `agents/extractor.py`, `agents/extractor_fields.py` |
 | **Andrés** | Reglas, cruces, dictamen, medición de precisión | `rules/`, `data/rules/`, `agents/validator.py`, `agents/cross_validator.py`, `agents/synthesizer.py`, `evaluacion.py`, `evaluacion/` |
-| **Victor** | Interfaz, pitch, video | `frontend/` (por crear), `ui/`, `pitch/` |
+| **Victor** | Ingesta + OCR, clasificador, armar expedientes desde los ZIP, ambiente de las laptops, sistema de logs, pitch y video | `ingestion/`, `agents/classifier.py`, `logs.py` (por crear), `pitch/` |
 
 Archivos compartidos (avisa antes de tocarlos): `text.py` (normalización), `demo.py` (fixtures), `tests/`.
 
@@ -82,21 +83,23 @@ Cada tarea dice cuándo está hecha y de qué depende. Si depende de alguien, la
 |---|---|---|---|---|
 | A1 | P0 | Revisar y fusionar el PR del bosquejo a `dev`. Incluye **cambios aditivos** a `schemas.py`: `confidence`, `method`, `severity`, `trace`, `reasons`, `processing_ms`, `llm_mode` | `dev` con el CI en verde | — |
 | A2 | P0 | Ollama en la PC "cerebro". Comparar `llama3.1:8b` contra `qwen2.5:14b` con `tiendas3b evaluar` | `tiendas3b estado` dice "LLM responde: sí" y ya hay un tiempo medido por expediente | El modo heurístico (`LLM_PROVIDER=none`) |
-| A3 | P0 | Decidir con Victor el idioma del contrato (hoy en inglés: `recommendation`, `document_analyses`). Se decide una vez y no se cambia | Anotado en `estado/aaron.md` | — |
+| A3 | P0 | Decidir con Diego el idioma del contrato (hoy en inglés: `recommendation`, `document_analyses`). Se decide una vez y no se cambia | Anotado en `estado/aaron.md` | — |
 | A4 | P1 | **Cola de trabajos**: `POST /api/v1/trabajos` → id; `GET /api/v1/trabajos/{id}` → estado, posición y resultado. `ThreadPoolExecutor` con `MAX_WORKERS` (2) y resultados en memoria con caducidad | 3 navegadores suben expedientes a la vez y los tres terminan | `POST /api/v1/analizar` (síncrono) |
 | A5 | P1 | **CI/CD**: proteger `main` y `dev` (PR + CI verde), job que compile `frontend/`, `pip-audit` y Dependabot, tag `v0.1-demo` para la demo | Rama protegida y CI con 2 jobs | — |
-| A6 | P1 | **Seguridad**: `API_KEY` opcional (header `X-API-Key`), `CORS_ORIGINS` por variable, logs sin texto de los documentos. Los límites de tamaño ya existen | Sin la llave, la API responde 401 | — |
+| A6 | P1 | **Seguridad**: `API_KEY` opcional (header `X-API-Key`) y `CORS_ORIGINS` por variable. Los límites de tamaño ya existen. Que los logs no lleven datos sensibles es V7 (Victor) | Sin la llave, la API responde 401 | — |
 | A7 | P2 | `docker compose` (API + Ollama) y dictamen en PDF (`latex_report.py` de TrustNode) | — | — |
 
-### Diego · ingesta, OCR, clasificador, ambiente
+### Diego · interfaz (dashboard)
+
+Sigue la guía [docs/GUIA_DASHBOARD.md](docs/GUIA_DASHBOARD.md): pantallas, de dónde sale cada dato, textos, colores, estados y flujo de la demo.
 
 | # | Prioridad | Tarea | Hecha cuando | Mientras tanto |
 |---|---|---|---|---|
-| D1 | P0 | Ambiente de las 5 laptops: Python 3.11, `make setup`, `tesseract-ocr-spa` | `make check` en verde en todas | — |
-| D2 | P0 | Con los documentos reales **en local**: cuántas páginas son escaneo (`LoadedPage.source == "ocr"`) y qué tan bueno sale el OCR | Números en `estado/diego.md` | — |
-| D3 | P0 | Correr el clasificador sobre los PDFs reales y ajustar `_KEYWORDS` | ≥ 95 % de acierto, o lista de los que fallan | — |
-| D4 | P1 | **Armar expedientes**: los ZIP vienen por tipo de documento, no por inmueble. Comando `tiendas3b agrupar` que junte por clave catastral o dirección, o por la convención de nombres que diga el comité | Carpetas `data/expedientes/<ID>/` con sus documentos | Los expedientes ficticios |
-| D5 | P2 | Preprocesar imágenes para el OCR (escala de grises, binarizar) si la calidad es baja | — | — |
+| D1 | P0 | `frontend/` con Vite + React + TS a partir de TrustNode. Reutilizar `ScoreRing`, `FindingsCard`, `ComplianceHeatmap`, `UploadModal`, `ExecutiveSummary` y los tokens de `index.css`. Pantalla de **dictamen**: veredicto, razones, documentos, hallazgos con cita y matriz documento × regla | Los 4 casos de ejemplo se ven completos | `GET /api/v1/ejemplo?caso=…` (no necesita LLM ni documentos) |
+| D2 | P1 | **Comparación entre documentos** (los 5 cruces lado a lado) y datos extraídos con su confianza | Se ve en el caso "revisión" la superficie 960 vs 850 m² | — |
+| D3 | P1 | Subida real (`POST /api/v1/analizar`) y **visor de evidencia**: abrir el PDF en `#page=N` con una URL local del archivo, sin guardar nada en el servidor | Clic en un hallazgo → la página del PDF | — |
+| D4 | P1 | **Bandeja** de expedientes con contadores, y "Cómo se decidió" (traza + `GET /api/v1/grafo`) | Varios expedientes en la bandeja, ordenados por prioridad | Estado en el navegador hasta que existan A4 y V7 |
+| D5 | P1 | Conectar la bandeja a la cola (A4) y a la bitácora (V7) | Cada auditor ve su posición en la fila | — |
 
 ### Carlos · extractores
 
@@ -117,16 +120,19 @@ Cada tarea dice cuándo está hecha y de qué depende. Si depende de alguien, la
 | N4 | P1 | Reporte de precisión para el pitch: aciertos, falsos Cumple y segundos por expediente | Números en `estado/andres.md` para Victor | — |
 | N5 | P1 | Revisar la política del dictamen (¿que falte la escritura debe ser No cumple?) | Decisión anotada en `synthesizer.py` | — |
 
-### Victor · interfaz, pitch, video
+### Victor · ingesta, OCR, clasificador, ambiente, logs, pitch
 
 | # | Prioridad | Tarea | Hecha cuando | Mientras tanto |
 |---|---|---|---|---|
-| V1 | P0 | `frontend/` con Vite + React + TS a partir de TrustNode. Reutilizar `ScoreRing` (confianza), `FindingsCard` (hallazgos con cita), `ComplianceHeatmap` → matriz documento × regla, `UploadModal` (subir PDFs) y los tokens de `index.css`. Quitar remotion, ChromaDB y standards | Pantalla con veredicto, razones, matriz y hallazgos para los 4 casos | `GET /api/v1/ejemplo?caso=…` (no necesita LLM ni documentos) |
-| V2 | P0 | Guion del pitch v1 (`pitch/guion_v1.md`) | Leído en voz alta en 3:00 | Cifras en corchetes hasta tener N4 |
-| V3 | P1 | Subida real (`POST /api/v1/analizar`) y ver la cita en el PDF original: abrir el archivo en el navegador con `#page=N`, sin guardar nada en el servidor | Clic en un hallazgo → página del PDF | — |
-| V4 | P1 | Traza del grafo (`trace`, ms por agente) y diagrama (`GET /api/v1/grafo`) | Visible en la demo | — |
-| V5 | P1 | Panel de cola cuando A4 exista | Cada auditor ve su posición | — |
-| V6 | P1 | Video de respaldo y 3 ensayos con la demo real | Video guardado en 2 laptops | — |
+| V1 | P0 | Ambiente de las 5 laptops: Python 3.11, `make setup`, `tesseract-ocr-spa` (y Node para Diego) | `make check` en verde en todas | — |
+| V2 | P0 | Con los documentos reales **en local**: cuántas páginas son escaneo (`LoadedPage.source == "ocr"`) y qué tan bueno sale el OCR | Números en `estado/victor.md` | — |
+| V3 | P0 | Correr el clasificador sobre los PDFs reales y ajustar `_KEYWORDS` | ≥ 95 % de acierto, o lista de los que fallan | — |
+| V4 | P0 | Guion del pitch v1 (`pitch/guion_v1.md`) | Leído en voz alta en 3:00 | Cifras en corchetes hasta tener N4 |
+| V5 | P1 | **Armar expedientes**: los ZIP vienen por tipo de documento, no por inmueble. Comando `tiendas3b agrupar` que junte por clave catastral o dirección, o por la convención de nombres que diga el comité | Carpetas `data/expedientes/<ID>/` con sus documentos | Los expedientes ficticios |
+| V6 | P1 | **Logs estructurados** (`logs.py`): una línea JSON por evento en `logs/tiendas3b.jsonl` con `expediente_id`, `request_id`, agente, ms y resultado; consola legible; nivel con `LOG_LEVEL`. Agregar `logs/` al `.gitignore` | Cada análisis deja su rastro completo por agente | — |
+| V7 | P1 | **Bitácora de auditoría y confidencialidad**: un registro por dictamen (fecha, expediente, veredicto, confianza, modelo, huella de los cartuchos de reglas, duración) y `GET /api/v1/bitacora` para el dashboard. Filtro con prueba que impida escribir texto de documentos o nombres de propietarios en los logs | Se puede reconstruir qué se dictaminó, cuándo y con qué reglas | — |
+| V8 | P1 | Video de respaldo (con Diego) y 3 ensayos con la demo real | Video guardado en 2 laptops | — |
+| V9 | P2 | Preprocesar imágenes para el OCR (escala de grises, binarizar) si la calidad es baja | — | — |
 
 ---
 
@@ -134,7 +140,9 @@ Cada tarea dice cuándo está hecha y de qué depende. Si depende de alguien, la
 
 | Diferenciador | Por qué le importa a 3B | Dueño | Prioridad |
 |---|---|---|---|
-| **PC cerebro + auditores en el navegador** | Una sola máquina con GPU y modelo. Los demás abren la interfaz por la red local y no instalan nada. Los documentos no salen de esa PC | Aaron (A4) + Victor (V5) | P1 |
+| **PC cerebro + auditores en el navegador** | Una sola máquina con GPU y modelo. Los demás abren la interfaz por la red local y no instalan nada. Los documentos no salen de esa PC | Aaron (A4) + Diego (D5) | P1 |
+| **Bitácora auditable** | Cada dictamen queda registrado con fecha, modelo y versión de las reglas. El equipo legal puede explicar cualquier decisión después | Victor (V6, V7) | P1 |
+| **Dashboard pensado para el equipo legal** | Veredicto en 3 segundos y cada hallazgo a un clic de su cita | Diego (D1–D4) | P0–P1 |
 | **Cola de trabajos** | Varios auditores a la vez sin saturar el LLM, que es el cuello de botella. Cada quien ve su posición en la fila | Aaron (A4) | P1 |
 | **Seguridad y confidencialidad** | LLM local, archivos temporales que se borran, llave de API, CORS cerrado, logs sin contenido, dependencias auditadas | Aaron (A6) | P1 |
 | **CI/CD** | Cada cambio pasa lint, tipos y pruebas antes de entrar. La demo sale de un tag estable | Aaron (A5) | P1 |
@@ -151,8 +159,8 @@ Firmas estables. Si cambias una, avisa en tu archivo de `estado/` antes del PR.
 
 | Módulo | Dueño | Función | Devuelve |
 |---|---|---|---|
-| `ingestion/pdf_loader.py` | Diego | `load_document(path)`, `load_expediente_dir(dir)` | `LoadedDocument` con páginas (`text`, `source`: pdf/ocr/vacia) |
-| `agents/classifier.py` | Diego | `classify(doc, llm=None, all_pages=False)` | `Classification(document_type, confidence, method)` |
+| `ingestion/pdf_loader.py` | Victor | `load_document(path)`, `load_expediente_dir(dir)` | `LoadedDocument` con páginas (`text`, `source`: pdf/ocr/vacia) |
+| `agents/classifier.py` | Victor | `classify(doc, llm=None, all_pages=False)` | `Classification(document_type, confidence, method)` |
 | `agents/extractor.py` | Carlos | `extract_fields(doc, doc_type, llm=None, strategy="auto")` | `(list[ExtractedField], faltantes)`; cada campo con `evidence` y `confidence` |
 | `agents/validator.py` | Andrés | `validate_document(analysis, cartuchos)` | `list[RuleEvaluation]` con `severity` |
 | `agents/cross_validator.py` | Andrés | `cross_validate_detailed(analyses)` | `(issues, resumen por cruce)` |
@@ -228,11 +236,11 @@ Pendientes:
 | Riesgo | Mitigación |
 |---|---|
 | `llama3.1:8b` se queda corto en precisión | Probar `qwen2.5:14b` (A2). Más reglas en Python. La heurística siempre queda de respaldo |
-| Escaneos de mala calidad | `tesseract-ocr-spa` (D1), preprocesado (D5). Confianza baja → "Requiere revisión" |
-| Los ZIP no traen cómo armar expedientes | Preguntar al comité. Agrupar por clave catastral o dirección (D4) |
+| Escaneos de mala calidad | `tesseract-ocr-spa` (V1), preprocesado (V9). Confianza baja → "Requiere revisión" |
+| Los ZIP no traen cómo armar expedientes | Preguntar al comité. Agrupar por clave catastral o dirección (V5) |
 | Varios auditores saturan el LLM | Cola con pocos workers (A4) |
 | La integración se atrasa | El bosquejo ya integra todo. Cada quien mejora su pieza sin romper la firma |
-| La demo falla en vivo | Video grabado (V6) y `GET /api/v1/ejemplo` como respaldo |
+| La demo falla en vivo | Video grabado (V8) y `GET /api/v1/ejemplo` como respaldo |
 
 ---
 
