@@ -25,6 +25,8 @@ class Settings:
     min_field_confidence: float
     max_workers: int = 2
     job_ttl_s: int = 3600
+    api_key: str = ""
+    cors_origins: tuple[str, ...] = ("*",)
 
     @property
     def llm_enabled(self) -> bool:
@@ -51,4 +53,9 @@ def get_settings() -> Settings:
         min_field_confidence=float(os.getenv("MIN_FIELD_CONFIDENCE", "0.6")),
         max_workers=max(1, int(os.getenv("MAX_WORKERS", "2"))),
         job_ttl_s=max(60, int(os.getenv("JOB_TTL_S", "3600"))),
+        api_key=os.getenv("API_KEY", "").strip(),
+        cors_origins=tuple(
+            o.strip() for o in os.getenv("CORS_ORIGINS", "*").split(",") if o.strip()
+        )
+        or ("*",),
     )

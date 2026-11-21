@@ -5,6 +5,7 @@ Cada carpeta de `expedientes_dir` con etiqueta se analiza y se compara.
 """
 
 import json
+import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -48,19 +49,30 @@ def _run(expediente: str, docs: list[LoadedDocument], expected: str, use_llm: bo
 def evaluate_dirs(labels_path: Path, expedientes_dir: Path, use_llm: bool = True) -> list[EvalRow]:
     labels: dict[str, str] = json.loads(labels_path.read_text(encoding="utf-8"))
     rows: list[EvalRow] = []
-    for name, expected in labels.items():
+    items = [(name, exp) for name, exp in labels.items() if (expedientes_dir / name).is_dir()]
+    for idx, (name, expected) in enumerate(items, start=1):
+        print(f"\r[{idx}/{len(items)}] evaluando {name}…", end="", file=sys.stderr, flush=True)
         folder = expedientes_dir / name
-        if not folder.is_dir():
-            continue
         rows.append(_run(name, load_expediente_dir(folder), expected, use_llm))
+    if items:
+        print(file=sys.stderr)
     return rows
 
 
 def evaluate_demo(use_llm: bool = False) -> list[EvalRow]:
-    return [
-        _run(case.expediente_id, demo_documents(key), case.expected.value, use_llm)
-        for key, case in DEMO_CASES.items()
-    ]
+    rows: list[EvalRow] = []
+    items = list(DEMO_CASES.items())
+    for idx, (key, case) in enumerate(items, start=1):
+        print(
+            f"\r[{idx}/{len(items)}] evaluando {case.expediente_id}…",
+            end="",
+            file=sys.stderr,
+            flush=True,
+        )
+        rows.append(_run(case.expediente_id, demo_documents(key), case.expected.value, use_llm))
+    if items:
+        print(file=sys.stderr)
+    return rows
 
 
 def format_rows(rows: list[EvalRow]) -> str:
