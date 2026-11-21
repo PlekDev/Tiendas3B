@@ -52,7 +52,7 @@ Más: `make api` (API en http://127.0.0.1:8000/docs), `make evaluar`, `make demo
 | CLI y evaluación | `analizar`, `ejemplo`, `evaluar`, `estado`, `grafo`, `api` | `cli.py`, `evaluacion.py` | Aaron / Andrés |
 | Expedientes ficticios | 4 casos (cumple, revisión, no cumple, incompleto) para trabajar sin datos de 3B | `demo.py` | Todos |
 | Interfaz (dashboard) | **Pendiente**. Guía lista en [docs/GUIA_DASHBOARD.md](docs/GUIA_DASHBOARD.md) | `frontend/` | Diego |
-| Logs y bitácora de auditoría | **Pendiente**. Hoy solo hay `logging` básico | `logs.py` (por crear) | Victor |
+| Logs y bitácora de auditoría | Listo (V6, V7): JSON por línea con `expediente_id` y `request_id`, valores del expediente redactados, bitácora por dictamen y `GET /api/v1/bitacora` | `logs.py` | Victor |
 | Cola de trabajos / modo servidor | **Pendiente** | `api/` | Aaron |
 | CI/CD y seguridad | CI actual pasa. Mejoras **pendientes** | `.github/workflows/` | Aaron |
 
