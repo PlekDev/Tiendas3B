@@ -363,3 +363,9 @@
   .y2k-graph__bar { flex-wrap: wrap; }
 }
 @media (min-width: 561px) { .y2k-desk__body { min-height: 470px; } }
+
+/* Progreso del análisis, arriba del grafo */
+.y2k-prog { display: flex; flex-direction: column; gap: 8px; padding: 14px 16px 0; }
+.y2k-prog__row { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; font: 600 13px/1.2 "Archivo", sans-serif; color: var(--desk-ink); }
+.y2k-prog__pct { font: 500 12px/1.2 "JetBrains Mono", monospace; color: var(--desk-ink-2); }
+.y2k-prog .y2k-block { height: 16px; transition: background-color 0.3s; }

@@ -13,6 +13,9 @@
     {"id": "PRE-05", "tipo": "numero_positivo", "campo": "superficie_registrada", "severidad": "warning",
      "descripcion": "La superficie registrada es un número mayor a cero."},
     {"id": "PRE-06", "tipo": "campo_presente", "campo": "referencia_cruzada", "severidad": "info",
-     "descripcion": "Incluye un dato que lo relaciona con los demás documentos."}
+     "descripcion": "Incluye un dato que lo relaciona con los demás documentos."},
+    {"id": "PRE-07", "tipo": "anio_permitido", "campo": "fecha_emision_vigencia", "severidad": "warning",
+     "descripcion": "El predial es del 2025 o 2026.",
+     "parametros": {"anios": [2025, 2026], "mensaje": "Predial fuera de tiempo."}}
   ]
 }

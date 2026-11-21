@@ -98,6 +98,36 @@ function shorten(a: FNode, b: FNode, ra: number, rb: number) {
   return { x1: a.x + (dx / d) * ra, y1: a.y + (dy / d) * ra, x2: b.x - (dx / d) * rb, y2: b.y - (dy / d) * rb };
 }
 
+const BLOQUES = 12;
+
+/** Barra de progreso del análisis (estilo Windows 2000). El avance es aproximado: el servidor responde de una vez. */
+function BarraAnalisis({ paso, pasos, listo }: { paso: number; pasos: string[]; listo: boolean }) {
+  const frac = listo ? 1 : Math.min(0.92, (paso + 0.5) / pasos.length);
+  const on = Math.round(frac * BLOQUES);
+  return (
+    <div className="y2k-prog">
+      <div className="y2k-prog__row">
+        <span>{listo ? "Dictamen listo" : `Analizando · ${pasos[paso]}`}</span>
+        <span className="y2k-prog__pct">
+          {listo ? "100 %" : `${Math.round(frac * 100)} % · paso ${paso + 1} de ${pasos.length} · aprox.`}
+        </span>
+      </div>
+      <div
+        className={`y2k-blocks${listo ? "" : " is-busy"}`}
+        role="progressbar"
+        aria-label="Avance del análisis"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(frac * 100)}
+      >
+        {Array.from({ length: BLOQUES }, (_, i) => (
+          <span key={i} className={`y2k-block${i < on ? " is-on" : ""}`} style={{ "--i": i } as React.CSSProperties} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /** Grafo de correlaciones: mientras el servidor analiza muestra los cruces que va a evaluar;
     al llegar el dictamen reproduce los reales (datos que salen de cada documento y flechas entre ellos). */
 export function GrafoCorrelacion({
@@ -189,6 +219,7 @@ export function GrafoCorrelacion({
 
   return (
     <div className="y2k-graph" role="img" aria-label={report ? "Cruces entre documentos" : `Analizando: ${pasos[paso]}`}>
+      <BarraAnalisis paso={paso} pasos={pasos} listo={!!report} />
       <div className="y2k-graph__bar">
         <span className="y2k-graph__tag">
           {report ? `${built?.edges.length ?? 0} cruces · ${built?.nodes.length ?? 0} datos leídos` : `[ ${pasos[paso]} ]`}

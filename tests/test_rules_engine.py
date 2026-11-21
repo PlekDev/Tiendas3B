@@ -135,3 +135,33 @@ def test_fecha_anio_actual_sin_today_usa_la_fecha_real() -> None:
     cartucho = Cartucho(tipo_documento=DocumentType.USO_DE_SUELO, nombre="t", reglas=[rule])
     actual = f"1 de enero de {date.today().year}"
     assert evaluate_rules(_analysis(fecha_emision_vigencia=actual), cartucho)[0].passed
+
+
+def _predial(value: str) -> tuple[bool, str]:
+    rule = Rule(
+        id="PRE-07",
+        tipo="anio_permitido",
+        campo="fecha_emision_vigencia",
+        descripcion="d",
+        parametros={"anios": [2025, 2026], "mensaje": "Predial fuera de tiempo."},
+    )
+    cartucho = Cartucho(tipo_documento=DocumentType.PREDIAL, nombre="t", reglas=[rule])
+    ev = evaluate_rules(_analysis(fecha_emision_vigencia=value), cartucho, date(2026, 11, 21))[0]
+    return ev.passed, ev.details
+
+
+def test_predial_2025_y_2026_pasan() -> None:
+    assert _predial("2026")[0]
+    assert _predial("Ejercicio fiscal 2025")[0]
+    assert _predial("15/03/2026")[0]
+
+
+def test_predial_de_otro_anio_dice_fuera_de_tiempo() -> None:
+    passed, details = _predial("12 de enero de 2023")
+    assert not passed
+    assert details == "Predial fuera de tiempo."
+    assert not _predial("2024")[0]
+
+
+def test_predial_sin_fecha_legible_no_pasa() -> None:
+    assert not _predial("sin fecha")[0]

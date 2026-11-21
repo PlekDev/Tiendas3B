@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { AnimatePresence, motion } from "motion/react";
+import { motion } from "motion/react";
 import type { DemoCase, DocType, Evidence, Report } from "../types";
-import { DOC_LABEL, DOC_ORDER, VERDICT_UI, type Tone } from "../labels";
+import { DOC_LABEL, DOC_ORDER, type Tone } from "../labels";
 import { getCasos } from "../api";
 import { fadeUp, spring, stagger } from "../anim";
 import "../y2k-tokens.css";
@@ -9,12 +9,10 @@ import "./nuevo/y2k.css";
 import { CarpetaDocumento, type Item, type Slot } from "./nuevo/CarpetaDocumento";
 import { CharolaAnexos, EscritorioY2K } from "./nuevo/EscritorioY2K";
 import { BotonCromado } from "./nuevo/BotonCromado";
-import { Destellos } from "./nuevo/Destellos";
 import { GrafoCorrelacion } from "./nuevo/GrafoCorrelacion";
 import { desbloquearSonido } from "./nuevo/sonido";
 import { HojaVoladora } from "./nuevo/HojaVoladora";
 import { Marquesina } from "./nuevo/Marquesina";
-import { SelloHolografico } from "./nuevo/SelloHolografico";
 
 const STEPS = ["Clasificador", "Extractores", "Validador", "Cruces", "Dictamen"];
 const SLOTS = DOC_ORDER as Slot[];
@@ -36,10 +34,6 @@ const EXAMPLE_TONE: Record<string, [Tone, string]> = {
   no_cumple: ["bad", "No cumple"],
   incompleto: ["miss", "Incompleto"],
 };
-
-const bloqueantes = (r: Report) =>
-  r.cross_validation_issues.filter((i) => i.severity === "critical").length +
-  r.document_analyses.reduce((n, a) => n + a.rule_evaluations.filter((x) => !x.passed && x.severity === "critical").length, 0);
 
 type Flight = { id: number; name: string; from: { x: number; y: number }; to: { x: number; y: number }; delay: number; done: () => void };
 let flightId = 0;
@@ -78,9 +72,7 @@ export function NewExpediente({
   const [casos, setCasos] = useState<DemoCase[] | null>(null);
   const [step, setStep] = useState(0);
   const [filling, setFilling] = useState(false);
-  const [archiving, setArchiving] = useState(false);
   const [announce, setAnnounce] = useState("");
-  const [resultBurst, setResultBurst] = useState(0);
   const [replay, setReplay] = useState<"idle" | "playing" | "done">("idle");
   const [lastExample, setLastExample] = useState<string | null>(null);
   const grid = useRef<HTMLDivElement>(null);
@@ -107,9 +99,10 @@ export function NewExpediente({
     setReplay("playing");
     setAnnounce("Dictamen listo");
   }, [result]);
+  // Al terminar el grafo se abre el expediente directamente.
   const replayDone = () => {
     setReplay("done");
-    setResultBurst((b) => b + 1);
+    onOpenResult();
   };
 
   /* ---------- colocar / quitar ---------- */
@@ -220,7 +213,7 @@ export function NewExpediente({
   const faltan = 4 - n;
   const aiOn = aiAvailable && ai;
   const finalId = id.trim() || `EXP-${new Date().toISOString().slice(0, 10)}`;
-  const locked = busy || filling || archiving;
+  const locked = busy || filling || !!result;
   const canRun = files.length > 0 && !locked;
 
   const mensaje =
@@ -232,9 +225,7 @@ export function NewExpediente({
 
   const iaTxt = offline ? "Sin conexión con la API" : aiOn ? "IA conectada" : "Sin IA · reglas y patrones";
   const leyendo = SLOTS.filter((s) => slots[s]).map((s) => DOC_LABEL[s]);
-  const marquee = archiving
-    ? "▸ Archivando expediente en la bandeja…"
-    : busy
+  const marquee = busy
       ? `▸ Leyendo ${leyendo.length ? leyendo.join("… ") + "…" : "expediente…"} · ${STEPS[step]} · ${iaTxt}`
       : result
         ? `▸ Dictamen listo · ${result.recommendation} · ${(result.processing_ms / 1000).toFixed(1)} s · ${iaTxt}`
@@ -247,21 +238,6 @@ export function NewExpediente({
   const analyze = () => {
     desbloquearSonido();
     onAnalyze(finalId, files, aiOn);
-  };
-
-  const archive = () => {
-    const g = grid.current;
-    if (!g) return onCancel();
-    const gr = g.getBoundingClientRect();
-    g.querySelectorAll<HTMLElement>(".y2k-slot").forEach((el) => {
-      const r = el.getBoundingClientRect();
-      el.style.setProperty("--dx", `${gr.left + gr.width / 2 - (r.left + r.width / 2)}px`);
-      el.style.setProperty("--dy", `${gr.top + gr.height / 2 - (r.top + r.height / 2)}px`);
-    });
-    setArchiving(true);
-    setAnnounce("Archivando en la bandeja");
-    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    setTimeout(onCancel, reduce ? 250 : 1300);
   };
 
   return (
@@ -314,7 +290,6 @@ export function NewExpediente({
                 duda={doubts[s] ?? null}
                 analizando={busy}
                 bloqueada={locked}
-                archivando={archiving}
                 onPick={(f) => pickInto(s, f)}
                 onRemove={() => removeSlot(s)}
                 onMove={() => moveSlot(s)}
@@ -395,50 +370,6 @@ export function NewExpediente({
         </BotonCromado>
       </div>
 
-      <AnimatePresence>
-        {result && !busy && replay === "done" && (
-          <motion.section
-            className="y2k-result"
-            aria-label="Resultado del análisis"
-            initial={{ opacity: 0, y: 90 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 40 }}
-            transition={{ type: "spring", stiffness: 190, damping: 20 }}
-          >
-            <Destellos fire={resultBurst} n={8} className="y2k-sparks--result" />
-            <SelloHolografico grande tono={toneOf(result)} rotate={-8}>
-              {VERDICT_UI[result.recommendation].short.toUpperCase()}
-            </SelloHolografico>
-            <dl className="y2k-result__facts">
-              <div>
-                <dt>Expediente</dt>
-                <dd className="mono">{result.expediente_id}</dd>
-              </div>
-              <div>
-                <dt>Confianza</dt>
-                <dd className="mono">{Math.round(result.confidence * 100)} %</dd>
-              </div>
-              <div>
-                <dt>Bloqueantes</dt>
-                <dd className="mono">{bloqueantes(result)}</dd>
-              </div>
-              <div>
-                <dt>Tiempo</dt>
-                <dd className="mono">{(result.processing_ms / 1000).toFixed(1)} s</dd>
-              </div>
-            </dl>
-            <div className="y2k-result__act">
-              <BotonCromado primario onClick={archive} disabled={archiving}>
-                Archivar en la bandeja
-              </BotonCromado>
-              <button type="button" className="y2k-link" onClick={() => onOpenResult()}>
-                Ver el dictamen completo
-              </button>
-            </div>
-          </motion.section>
-        )}
-      </AnimatePresence>
-
       <section className="nx-examples">
         <h2 className="nx-sub">
           <span className="mono">[ ✦ ]</span> O prueba con un ejemplo
@@ -472,9 +403,4 @@ export function NewExpediente({
       </section>
     </main>
   );
-}
-
-function toneOf(r: Report): "ok" | "warn" | "bad" {
-  const c = VERDICT_UI[r.recommendation].cls;
-  return c === "ok" ? "ok" : c === "bad" ? "bad" : "warn";
 }

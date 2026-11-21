@@ -7,6 +7,7 @@ uno de los tipos de regla de `RULE_TYPES`. Todas se calculan en Python.
 
 import json
 import logging
+import re
 from collections.abc import Callable
 from datetime import date, timedelta
 from pathlib import Path
@@ -156,6 +157,25 @@ def _check_fecha_anio_actual(rule: Rule, field: ExtractedField | None, today: da
     )
 
 
+def _check_anio_permitido(rule: Rule, field: ExtractedField | None, today: date) -> Outcome:
+    """El documento es de alguno de los años permitidos (`parametros.anios`).
+
+    Se usa el año más reciente que aparezca en el valor: sirve igual para "2026",
+    "Ejercicio fiscal 2025" o "15/03/2026". Fuera de esos años: "Predial fuera de tiempo".
+    """
+    anios = {int(a) for a in rule.parametros.get("anios", [])}
+    if not _has_value(field):
+        return False, f"No se encontró la fecha en '{rule.campo}'."
+    assert field is not None
+    years = {d.year for d in find_dates(field.value or "")}
+    years |= {int(y) for y in re.findall(r"(?<!\d)(19\d{2}|20\d{2})(?!\d)", field.value or "")}
+    if not years:
+        return False, f"No se pudo leer un año en '{field.value}'."
+    if max(years) in anios:
+        return True, f"Año {max(years)} dentro de lo permitido."
+    return False, rule.parametros.get("mensaje", "Fuera de tiempo.")
+
+
 def _check_numero_positivo(rule: Rule, field: ExtractedField | None, today: date) -> Outcome:
     number = parse_number(field.value or "") if field else None
     if number is None or number <= 0:
@@ -170,6 +190,7 @@ RULE_TYPES: dict[str, RuleCheck] = {
     "alerta_si_presente": _check_alerta_si_presente,
     "fecha_vigente": _check_fecha_vigente,
     "fecha_anio_actual": _check_fecha_anio_actual,
+    "anio_permitido": _check_anio_permitido,
     "numero_positivo": _check_numero_positivo,
 }
 

@@ -86,6 +86,19 @@ FIELD_SPECS: dict[DocumentType, dict[str, FieldSpec]] = {
             "Dato que lo liga a otros documentos: folio real o número de escritura.",
             ("folio real", "numero de escritura", "escritura"),
         ),
+        "fecha_emision_vigencia": FieldSpec(
+            "Ejercicio fiscal (año) o fecha de pago o emisión del recibo de predial.",
+            (
+                "ejercicio fiscal",
+                "periodo",
+                "fecha de pago",
+                "fecha de emision",
+                "recibo de pago del impuesto predial",
+                "impuesto predial",
+                "ejercicio",
+                "fecha",
+            ),
+        ),
     },
     DocumentType.ALINEAMIENTO: {
         "direccion_oficial": FieldSpec(

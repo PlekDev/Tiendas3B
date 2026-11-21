@@ -50,6 +50,7 @@ def _predial(owner: str, address: str, area: str) -> list[str]:
     return [
         "TESORERÍA MUNICIPAL DE SAN ANDRÉS CHOLULA\n"
         f"RECIBO DE PAGO DEL IMPUESTO PREDIAL {_YEAR}\n"
+        f"Ejercicio fiscal: {_YEAR}\n"
         "Cuenta predial: 114-002-007-000\n"
         f"Nombre del contribuyente: {owner}\n"
         f"Ubicación del predio: {address}\n"
