@@ -63,3 +63,8 @@ reportes/
 
 evaluacion/extractores_local.py
 evaluacion/dorado.json
+# Logs y bitácora (pueden traer IDs de expedientes)
+logs/
+
+# Caché local de OCR (texto de documentos: nunca se sube)
+data/cache/

@@ -46,7 +46,7 @@ where = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
-addopts = "-v --tb=short"
+addopts = "-v --tb=short -m 'not real_data'"
 markers = [
     "real_data: Pruebas locales con los PDFs oficiales del reto en data/expedientes/ (omitidas en CI).",
 ]

@@ -12,7 +12,7 @@ on:
 
 jobs:
   lint-and-test:
-    name: Lint, Type Check & Tests (Python ${{ matrix.python-version }})
+    name: Lint, Type Check, Tests & Audit (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -32,7 +32,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[dev]"
+          pip install -e ".[dev]" pip-audit
 
       - name: Run Ruff linter
         run: ruff check src tests
@@ -45,3 +45,43 @@ jobs:
 
       - name: Run Pytest
         run: pytest
+
+      - name: Audit Python dependencies (pip-audit)
+        if: matrix.python-version == '3.12'
+        run: pip-audit --skip-editable
+
+  frontend-build:
+    name: Build Frontend (Vite + React + TS)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check if frontend exists
+        id: check_frontend
+        run: |
+          if [ -f "frontend/package.json" ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "frontend/package.json aún no existe; se activará automáticamente con D1."
+          fi
+
+      - name: Set up Node.js 20
+        if: steps.check_frontend.outputs.exists == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install & Build Frontend
+        if: steps.check_frontend.outputs.exists == 'true'
+        working-directory: frontend
+        run: |
+          if [ -f "package-lock.json" ]; then
+            npm ci
+          else
+            npm install
+          fi
+          npm run build
