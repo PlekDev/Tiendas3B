@@ -139,7 +139,13 @@ def _llm(document: LoadedDocument, llm: BaseChatModel) -> Classification | None:
         f'Responde SOLO JSON: {{"tipo": uno de [{options}], "confianza": 0 a 1}}.'
     )
     user = f"Archivo: {document.filename}\n\nTexto:\n{text}"
-    result = invoke_json(llm, system, user, _LLMClassification)
+    result = invoke_json(
+        llm,
+        system,
+        user,
+        _LLMClassification,
+        call_name=f"clasificador | archivo={document.filename}",
+    )
     if result is None:
         return None
     try:
@@ -159,7 +165,11 @@ def classify(
     all_pages=True lee todo el documento (lo usa el supervisor al reintentar).
     """
     heuristic = _heuristic(document, None if all_pages else CLASSIFY_PAGES)
-    if llm is None or heuristic.confidence >= 0.75:
+    if (
+        llm is None
+        or heuristic.confidence >= 0.75
+        or heuristic.document_type == DocumentType.DESCONOCIDO
+    ):
         return heuristic
     from_llm = _llm(document, llm)
     if from_llm is None:

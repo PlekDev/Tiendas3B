@@ -5,23 +5,30 @@ validación con Pydantic, un reintento y, si falla, devolver None para que el
 agente use su ruta heurística. Así el sistema nunca se cae por el LLM.
 """
 
+import itertools
 import json
 import logging
 import os
 import re
+import sys
+import threading
 import time
 import urllib.request
+from pathlib import Path
 from typing import TypeVar
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from pydantic import BaseModel, ValidationError
 
-from tiendas3b.config import Settings, get_settings
+from tiendas3b.config import PROJECT_ROOT, Settings, get_settings
 
 logger = logging.getLogger(__name__)
 
 T = TypeVar("T", bound=BaseModel)
+
+_CALL_COUNTER = itertools.count(1)
+_TRACE_LOCK = threading.Lock()
 
 _RETRY_SUFFIX = (
     "\n\nTu respuesta anterior no fue JSON válido con el esquema pedido. "
@@ -95,26 +102,91 @@ def _parse_json_object(text: str) -> object:
     return json.loads(text[start : end + 1])
 
 
-def invoke_json(model: BaseChatModel, system: str, user: str, schema: type[T]) -> T | None:
+def _emit_llm_trace(block: str) -> None:
+    """Traza de llamadas LLM (deshabilitada por defecto).
+
+    LLM_TRACE=0 (por defecto): no imprime ni escribe nada.
+    LLM_TRACE=1 | true: imprime en terminal y guarda en logs/llm_calls.log.
+    LLM_TRACE=file: solo guarda en logs/llm_calls.log sin imprimir en terminal.
+    """
+    trace_mode = os.getenv("LLM_TRACE", "0").strip().lower()
+    if trace_mode in ("", "0", "false", "no") or os.getenv("PYTEST_CURRENT_TEST"):
+        return
+    with _TRACE_LOCK:
+        if trace_mode in ("1", "true", "yes", "console", "all"):
+            print(block, file=sys.stderr, flush=True)
+        if trace_mode in ("1", "true", "yes", "file", "all"):
+            log_dir = Path(os.getenv("LOG_DIR") or (PROJECT_ROOT / "logs"))
+            try:
+                log_dir.mkdir(parents=True, exist_ok=True)
+                with (log_dir / "llm_calls.log").open("a", encoding="utf-8") as fh:
+                    fh.write(block + "\n")
+            except OSError:
+                pass
+
+
+def invoke_json(
+    model: BaseChatModel,
+    system: str,
+    user: str,
+    schema: type[T],
+    call_name: str = "",
+) -> T | None:
     """Pide al modelo un JSON que cumpla `schema`. Un reintento; None si no lo logra."""
+    call_id = next(_CALL_COUNTER)
+    label = call_name or schema.__name__
     messages: list[BaseMessage] = [SystemMessage(content=system), HumanMessage(content=user)]
     for attempt in (1, 2):
+        prompt_sent = str(messages[-1].content)
+        _emit_llm_trace(
+            f"\n{'=' * 72}\n"
+            f"[LLM #{call_id} · Intento {attempt}/2] ENVIANDO → {label}\n"
+            f"{'-' * 72}\n"
+            f"[SYSTEM]\n{system}\n"
+            f"{'-' * 72}\n"
+            f"[USER ({len(prompt_sent)} chars)]\n{prompt_sent}\n"
+            f"{'=' * 72}"
+        )
+        t0 = time.perf_counter()
         try:
-            t0 = time.perf_counter()
             response = model.invoke(messages)
+            elapsed = time.perf_counter() - t0
             meta = response.response_metadata
+            raw_content = str(response.content)
+            _emit_llm_trace(
+                f"\n{'=' * 72}\n"
+                f"[LLM #{call_id} · Intento {attempt}/2] RECIBIDO ← {label} ({elapsed:.2f}s)\n"
+                f"tokens_entrada={meta.get('prompt_eval_count')} · "
+                f"tokens_salida={meta.get('eval_count')} · "
+                f"motivo_fin={meta.get('done_reason')}\n"
+                f"{'-' * 72}\n"
+                f"{raw_content}\n"
+                f"{'=' * 72}"
+            )
             logger.info(
-                "LLM intento %d: %.1fs entrada=%s salida=%s fin=%s",
+                "LLM #%d (%s) intento %d: %.1fs entrada=%s salida=%s fin=%s",
+                call_id,
+                label,
                 attempt,
-                time.perf_counter() - t0,
+                elapsed,
                 meta.get("prompt_eval_count"),
                 meta.get("eval_count"),
                 meta.get("done_reason"),
             )
-            return schema.model_validate(_parse_json_object(str(response.content)))
+            return schema.model_validate(_parse_json_object(raw_content))
         except (json.JSONDecodeError, ValidationError) as exc:
+            _emit_llm_trace(
+                f"[LLM #{call_id} · Intento {attempt}/2] ERROR PARSEO ← {label}: "
+                f"{type(exc).__name__}: {exc}"
+            )
             logger.warning("LLM intento %d: respuesta inválida (%s).", attempt, type(exc).__name__)
             messages = [SystemMessage(content=system), HumanMessage(content=user + _RETRY_SUFFIX)]
         except Exception as exc:  # noqa: BLE001 - red, timeout o modelo no descargado
+            elapsed = time.perf_counter() - t0
+            _emit_llm_trace(
+                f"[LLM #{call_id} · Intento {attempt}/2] ERROR RED/MODELO ← {label} "
+                f"({elapsed:.2f}s): {exc}"
+            )
             logger.warning("LLM intento %d: error al invocar (%s).", attempt, exc)
+            return None
     return None

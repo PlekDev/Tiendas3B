@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 Strategy = Literal["auto", "heuristica", "heuristica_amplia", "llm"]
 
-MAX_PROMPT_CHARS = 10_000  # ~3.5k tokens: holgado con num_ctx=8192 (OCR tokeniza mal)
+MAX_PROMPT_CHARS = 2_500  # ~3.5k tokens: holgado con num_ctx=8192 (OCR tokeniza mal)
 MAX_SNIPPET_CHARS = 240
 MIN_AREA_M2 = 20.0  # un local o terreno comercial no mide menos
 
@@ -40,14 +40,13 @@ CONF_LLM_UNVERIFIED = 0.3
 CONF_LABEL_SAME_LINE = 0.75
 CONF_LABEL_NEXT_LINE = 0.65
 CONF_DISCREPANCY = 0.55  # heurística y LLM dicen cosas distintas → dato en duda
-FAST_HEURISTIC_MIN = 0.80  # con esta confianza no se le pregunta al LLM
+FAST_HEURISTIC_MIN = CONF_LABEL_NEXT_LINE  # con esta confianza no se le pregunta al LLM
 
 SYSTEM_PROMPT = """Eres un analista legal que revisa expedientes de inmuebles en México.
 Extrae SOLO información escrita en el documento. No supongas ni completes datos.
 Para cada campo devuelve:
 - "valor": el dato tal como aparece (texto), o null si no aparece.
 - "pagina": número de página donde aparece (los marcadores [Página N] la indican), o null.
-- "cita": fragmento LITERAL copiado del documento que contiene el dato (máx. 120 caracteres).
 Si no estás seguro, usa null. Responde SOLO con JSON:
 {"campos": {"<campo>": {"valor": "...", "pagina": 1, "cita": "..."}}}"""
 
@@ -392,7 +391,14 @@ def _extract_llm(
         f"Tipo de documento: {doc_type.value}\nArchivo: {doc.filename}\n\n"
         f"Campos a extraer:\n{fields_desc}\n\nTEXTO DEL DOCUMENTO:\n{_select_pages(doc, specs)}"
     )
-    result = invoke_json(llm, SYSTEM_PROMPT, user, _LLMExtraction)
+    campos_str = ", ".join(specs.keys())
+    result = invoke_json(
+        llm,
+        SYSTEM_PROMPT,
+        user,
+        _LLMExtraction,
+        call_name=f"extractor:{doc_type.value} | archivo={doc.filename} | campos=[{campos_str}]",
+    )
     if result is None:
         return {}
     found: dict[str, ExtractedField] = {}
@@ -457,7 +463,7 @@ def extract_fields(
 
     llm_found: dict[str, ExtractedField] = {}
     if llm is not None and strategy in ("auto", "llm"):
-        fast = strategy == "auto" and document_type is not DocumentType.ESCRITURAS
+        fast = strategy == "auto"
         pending = {
             name: spec
             for name, spec in specs.items()
