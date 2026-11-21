@@ -3,6 +3,7 @@
 analizar <carpeta|archivos…>   Dictamina un expediente y guarda el JSON
 ejemplo [caso]                 Expediente ficticio: cumple, revision, no_cumple, incompleto
 evaluar                        Precisión contra veredictos esperados
+agrupar [origen]               Arma expedientes desde documentos sueltos (ZIP por tipo)
 demo-pdfs                      Escribe los expedientes ficticios como PDFs
 estado                         Configuración, LLM y cartuchos de reglas
 grafo                          Diagrama Mermaid del grafo de agentes
@@ -110,6 +111,38 @@ def _cmd_evaluar(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_agrupar(args: argparse.Namespace) -> int:
+    from tiendas3b.ingestion.agrupar import (
+        document_keys,
+        format_plan,
+        group_documents,
+        write_groups,
+    )
+    from tiendas3b.llm import get_chat_model
+
+    root = Path(args.origen)
+    paths = sorted(
+        p for p in root.rglob("*") if p.is_file() and p.suffix.lower() in SUPPORTED_SUFFIXES
+    )
+    if not paths:
+        print(f"No encontré PDFs ni imágenes en {root}.", file=sys.stderr)
+        return 1
+    llm = None if args.sin_llm else get_chat_model()
+    keys = []
+    for i, path in enumerate(paths, start=1):
+        print(f"\r[{i}/{len(paths)}] clasificando…", end="", file=sys.stderr, flush=True)
+        keys.append(document_keys(load_document(path), path, llm))
+    print(file=sys.stderr)
+    groups = group_documents(keys)
+    print(format_plan(groups, root))
+    if args.simular:
+        print("\nSimulación: no se copió nada. Quita --simular para crear las carpetas.")
+        return 0
+    write_groups(groups, Path(args.destino))
+    print(f"\nCopiados a {args.destino} (los originales no se tocaron).")
+    return 0
+
+
 def _cmd_demo_pdfs(args: argparse.Namespace) -> int:
     for folder in write_demo_pdfs(Path(args.destino)):
         print(f"Escrito: {folder}")
@@ -170,6 +203,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--demo", action="store_true", help="Usa los casos ficticios en memoria.")
     p.add_argument("--sin-llm", action="store_true")
     p.set_defaults(func=_cmd_evaluar)
+
+    p = sub.add_parser("agrupar", help="Arma expedientes desde documentos sueltos.")
+    p.add_argument("origen", nargs="?", default=str(PROJECT_ROOT / "data" / "raw"))
+    p.add_argument("--destino", default=str(PROJECT_ROOT / "data" / "expedientes"))
+    p.add_argument("--simular", action="store_true", help="Muestra el plan sin copiar nada.")
+    p.add_argument("--sin-llm", action="store_true")
+    p.set_defaults(func=_cmd_agrupar)
 
     p = sub.add_parser("demo-pdfs", help="Escribe los casos ficticios como PDFs.")
     p.add_argument("--destino", default=str(PROJECT_ROOT / "data" / "expedientes"))
