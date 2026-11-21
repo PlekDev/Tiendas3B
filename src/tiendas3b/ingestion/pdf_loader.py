@@ -2,22 +2,29 @@
 
 Basado en `ingestion.py` de TrustNode, sin chunking ni ChromaDB: los documentos
 de un expediente son cortos y se leen completos, página por página.
+
+El OCR es lento (≈20 s por documento escaneado), así que el texto de cada archivo se
+guarda en una caché local identificada por la huella del archivo (`data/cache/ocr/`,
+ignorada por git). La API no la usa: ahí no se guarda nada de los documentos subidos.
 """
 
+import hashlib
+import json
 import logging
+import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
 
 import pymupdf
 
-from tiendas3b.config import get_settings
+from tiendas3b.config import PROJECT_ROOT, get_settings
 
 logger = logging.getLogger(__name__)
 
 SUPPORTED_SUFFIXES = (".pdf", ".png", ".jpg", ".jpeg", ".tif", ".tiff")
 MIN_TEXT_CHARS = 25  # Menos que esto en una página = probablemente escaneo
-OCR_DPI = 300
+CACHE_VERSION = 1  # Súbelo si cambia la forma de extraer texto: invalida la caché
 
 
 @dataclass(frozen=True)
@@ -67,13 +74,18 @@ def _ocr_image(image: object, lang: str) -> str:
         return ""
 
 
+def ocr_dpi() -> int:
+    """300 lee mejor; 200 es casi el doble de rápido. Configurable con OCR_DPI."""
+    return int(os.getenv("OCR_DPI") or "300")
+
+
 def _ocr_page(page: pymupdf.Page, lang: str) -> str:
     try:
         from PIL import Image
     except ImportError:
         logger.warning("OCR no disponible: falta Pillow (extra [ocr]).")
         return ""
-    pix = page.get_pixmap(dpi=OCR_DPI)
+    pix = page.get_pixmap(dpi=ocr_dpi())
     image = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
     return _ocr_image(image, lang)
 
@@ -107,18 +119,67 @@ def load_image(file_path: Path) -> LoadedDocument:
     return LoadedDocument(filename=file_path.name, path=file_path, pages=[page])
 
 
-def load_document(file_path: Path) -> LoadedDocument:
-    if file_path.suffix.lower() == ".pdf":
-        return load_pdf(file_path)
-    return load_image(file_path)
-
-
-def load_expediente_dir(directory: Path) -> list[LoadedDocument]:
-    """Carga todos los PDFs e imágenes de una carpeta (un expediente por carpeta)."""
-    paths = sorted(
-        p for p in directory.iterdir() if p.is_file() and p.suffix.lower() in SUPPORTED_SUFFIXES
+def is_document_file(path: Path) -> bool:
+    """PDF o imagen real: descarta ocultos y los `__MACOSX/._*` que deja macOS al comprimir."""
+    return (
+        path.is_file()
+        and path.suffix.lower() in SUPPORTED_SUFFIXES
+        and not path.name.startswith(".")
+        and "__MACOSX" not in path.parts
     )
-    return [load_document(path) for path in paths]
+
+
+def ocr_cache_dir() -> Path | None:
+    """Carpeta de la caché, o None si OCR_CACHE=0."""
+    if (os.getenv("OCR_CACHE") or "1").strip().lower() in ("0", "no", "false"):
+        return None
+    path = Path(os.getenv("OCR_CACHE_DIR") or "data/cache/ocr")
+    return path if path.is_absolute() else PROJECT_ROOT / path
+
+
+def _cache_key(file_path: Path) -> str:
+    digest = hashlib.sha256(file_path.read_bytes())
+    digest.update(f"|v{CACHE_VERSION}|{get_settings().ocr_lang}|{ocr_dpi()}".encode())
+    return digest.hexdigest()
+
+
+def _read_cache(path: Path) -> list[LoadedPage] | None:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return [LoadedPage(p["page_number"], p["text"], p["source"]) for p in data["pages"]]
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
+def _write_cache(path: Path, pages: list[LoadedPage]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".tmp")
+    payload = {"pages": [p.__dict__ for p in pages]}
+    tmp.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    tmp.replace(path)  # escritura atómica: una corrida interrumpida no deja basura
+
+
+def load_document(file_path: Path, use_cache: bool = True) -> LoadedDocument:
+    """Lee un PDF o imagen. Con caché, el OCR de cada archivo se hace una sola vez."""
+    cache_dir = ocr_cache_dir() if use_cache else None
+    cache_file = cache_dir / f"{_cache_key(file_path)}.json" if cache_dir else None
+    if cache_file and cache_file.exists():
+        pages = _read_cache(cache_file)
+        if pages is not None:
+            return LoadedDocument(filename=file_path.name, path=file_path, pages=pages)
+    if file_path.suffix.lower() == ".pdf":
+        doc = load_pdf(file_path)
+    else:
+        doc = load_image(file_path)
+    if cache_file:
+        _write_cache(cache_file, doc.pages)
+    return doc
+
+
+def load_expediente_dir(directory: Path, use_cache: bool = True) -> list[LoadedDocument]:
+    """Carga todos los PDFs e imágenes de una carpeta (un expediente por carpeta)."""
+    paths = sorted(p for p in directory.iterdir() if is_document_file(p))
+    return [load_document(path, use_cache) for path in paths]
 
 
 def load_text_document(filename: str, pages: list[str]) -> LoadedDocument:

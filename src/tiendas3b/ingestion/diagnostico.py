@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from tiendas3b.agents.classifier import classify
-from tiendas3b.ingestion.pdf_loader import SUPPORTED_SUFFIXES, load_document
+from tiendas3b.ingestion.pdf_loader import is_document_file, load_document
 from tiendas3b.models.schemas import DocumentType
 from tiendas3b.rules.criteria import DOCUMENT_LABELS
 from tiendas3b.text import normalize
@@ -55,9 +55,7 @@ def expected_type(path: Path) -> DocumentType | None:
 
 
 def find_documents(root: Path) -> list[Path]:
-    return sorted(
-        p for p in root.rglob("*") if p.is_file() and p.suffix.lower() in SUPPORTED_SUFFIXES
-    )
+    return sorted(p for p in root.rglob("*") if is_document_file(p))
 
 
 def diagnose(path: Path) -> DocDiagnosis:

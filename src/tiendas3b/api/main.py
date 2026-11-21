@@ -178,7 +178,8 @@ async def analizar_endpoint(
             path = Path(tmp) / name
             path.write_bytes(payload)
             paths.append(path)
-        documents = [await run_in_threadpool(load_document, p) for p in paths]
+        # Sin caché: los documentos subidos no dejan rastro en el servidor.
+        documents = [await run_in_threadpool(load_document, p, False) for p in paths]
         logger.info(
             "Analizando %d documentos",
             len(documents),
