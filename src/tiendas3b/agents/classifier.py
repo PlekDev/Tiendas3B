@@ -139,7 +139,13 @@ def _llm(document: LoadedDocument, llm: BaseChatModel) -> Classification | None:
         f'Responde SOLO JSON: {{"tipo": uno de [{options}], "confianza": 0 a 1}}.'
     )
     user = f"Archivo: {document.filename}\n\nTexto:\n{text}"
-    result = invoke_json(llm, system, user, _LLMClassification)
+    result = invoke_json(
+        llm,
+        system,
+        user,
+        _LLMClassification,
+        call_name=f"clasificador | archivo={document.filename}",
+    )
     if result is None:
         return None
     try:

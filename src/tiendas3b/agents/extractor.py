@@ -392,7 +392,14 @@ def _extract_llm(
         f"Tipo de documento: {doc_type.value}\nArchivo: {doc.filename}\n\n"
         f"Campos a extraer:\n{fields_desc}\n\nTEXTO DEL DOCUMENTO:\n{_select_pages(doc, specs)}"
     )
-    result = invoke_json(llm, SYSTEM_PROMPT, user, _LLMExtraction)
+    campos_str = ", ".join(specs.keys())
+    result = invoke_json(
+        llm,
+        SYSTEM_PROMPT,
+        user,
+        _LLMExtraction,
+        call_name=f"extractor:{doc_type.value} | archivo={doc.filename} | campos=[{campos_str}]",
+    )
     if result is None:
         return {}
     found: dict[str, ExtractedField] = {}
