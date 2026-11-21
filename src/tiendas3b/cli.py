@@ -12,13 +12,14 @@ api                            Levanta la API para la interfaz
 """
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
 from tiendas3b.agents.orchestrator import analyze_expediente, graph_mermaid
 from tiendas3b.config import PROJECT_ROOT, get_settings
 from tiendas3b.demo import DEMO_CASES, demo_documents, write_demo_pdfs
-from tiendas3b.evaluacion import evaluate_demo, evaluate_dirs, format_rows
+from tiendas3b.evaluacion import evaluate_demo, evaluate_dirs, format_rows, report_json
 from tiendas3b.ingestion.diagnostico import (
     diagnose,
     find_documents,
@@ -110,11 +111,24 @@ def _emit(report: ExpedienteReport, args: argparse.Namespace) -> None:
 
 
 def _cmd_evaluar(args: argparse.Namespace) -> int:
+    missing: list[str] = []
     if args.demo:
         rows = evaluate_demo(use_llm=not args.sin_llm)
     else:
-        rows = evaluate_dirs(Path(args.etiquetas), Path(args.expedientes), not args.sin_llm)
-    print(format_rows(rows))
+        try:
+            rows, missing = evaluate_dirs(
+                Path(args.etiquetas), Path(args.expedientes), not args.sin_llm
+            )
+        except ValueError as exc:
+            print(exc, file=sys.stderr)
+            return 1
+    print(format_rows(rows, missing))
+    if args.salida:
+        Path(args.salida).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.salida).write_text(
+            json.dumps(report_json(rows, missing), ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        print(f"\nResultado guardado en {args.salida}", file=sys.stderr)
     return 0
 
 
@@ -230,6 +244,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--expedientes", default=str(PROJECT_ROOT / "data" / "expedientes"))
     p.add_argument("--demo", action="store_true", help="Usa los casos ficticios en memoria.")
     p.add_argument("--sin-llm", action="store_true")
+    p.add_argument("--salida", help="Guarda resumen y filas en JSON (solo IDs y veredictos).")
     p.set_defaults(func=_cmd_evaluar)
 
     p = sub.add_parser("agrupar", help="Arma expedientes desde documentos sueltos.")
