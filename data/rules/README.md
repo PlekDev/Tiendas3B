@@ -33,6 +33,7 @@ abajo. Si un archivo tiene un error, se reporta y se salta: no tumba el análisi
 | `no_contiene` | El dato no menciona ningún término | `valores` |
 | `alerta_si_presente` | No hay condicionantes (si los hay, falla como aviso) | `ignorar` |
 | `fecha_vigente` | La fecha más la vigencia no ha pasado | `vigencia_dias` |
+| `fecha_anio_actual` | La fecha más reciente es del año en curso (se calcula al correr), o declara una vigencia que no ha vencido. Falla si la fecha está en el futuro | `anios_tolerancia` (0 = solo el año actual) |
 
 ¿Necesitas otro tipo? Agrega una función en `RULE_TYPES` de `engine.py` y una prueba en
 `tests/test_rules_engine.py`.

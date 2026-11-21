@@ -3,27 +3,36 @@
 analizar <carpeta|archivos…>   Dictamina un expediente y guarda el JSON
 ejemplo [caso]                 Expediente ficticio: cumple, revision, no_cumple, incompleto
 evaluar                        Precisión contra veredictos esperados
+agrupar [origen]               Arma expedientes desde documentos sueltos (ZIP por tipo)
 demo-pdfs                      Escribe los expedientes ficticios como PDFs
 estado                         Configuración, LLM y cartuchos de reglas
+diagnostico [carpeta]          OCR y clasificador sobre documentos reales (solo conteos)
 grafo                          Diagrama Mermaid del grafo de agentes
 api                            Levanta la API para la interfaz
 """
 
 import argparse
-import logging
+import json
 import sys
 from pathlib import Path
 
 from tiendas3b.agents.orchestrator import analyze_expediente, graph_mermaid
 from tiendas3b.config import PROJECT_ROOT, get_settings
 from tiendas3b.demo import DEMO_CASES, demo_documents, write_demo_pdfs
-from tiendas3b.evaluacion import evaluate_demo, evaluate_dirs, format_rows
+from tiendas3b.evaluacion import evaluate_demo, evaluate_dirs, format_rows, report_json
+from tiendas3b.ingestion.diagnostico import (
+    diagnose,
+    find_documents,
+    format_details,
+    format_summary,
+)
 from tiendas3b.ingestion.pdf_loader import (
-    SUPPORTED_SUFFIXES,
+    is_document_file,
     load_document,
     load_expediente_dir,
 )
 from tiendas3b.llm import describe_mode, is_reachable
+from tiendas3b.logs import log_context, record_dictamen, setup_logging
 from tiendas3b.models.schemas import ExpedienteReport
 from tiendas3b.rules.criteria import DOCUMENT_LABELS
 from tiendas3b.rules.engine import load_cartuchos
@@ -74,12 +83,14 @@ def _cmd_analizar(args: argparse.Namespace) -> int:
         documents = load_expediente_dir(targets[0])
         expediente_id = args.id or targets[0].name
     else:
-        documents = [load_document(p) for p in targets if p.suffix.lower() in SUPPORTED_SUFFIXES]
+        documents = [load_document(p) for p in targets if is_document_file(p)]
         expediente_id = args.id or "EXP-CLI"
     if not documents:
         print("No encontré PDFs ni imágenes en esa ruta.", file=sys.stderr)
         return 1
-    report = analyze_expediente(expediente_id, documents, use_llm=not args.sin_llm)
+    with log_context(expediente_id) as request_id:
+        report = analyze_expediente(expediente_id, documents, use_llm=not args.sin_llm)
+        record_dictamen(report, "cli", request_id)
     _emit(report, args)
     return 0
 
@@ -100,17 +111,83 @@ def _emit(report: ExpedienteReport, args: argparse.Namespace) -> None:
 
 
 def _cmd_evaluar(args: argparse.Namespace) -> int:
+    missing: list[str] = []
     if args.demo:
         rows = evaluate_demo(use_llm=not args.sin_llm)
     else:
-        rows = evaluate_dirs(Path(args.etiquetas), Path(args.expedientes), not args.sin_llm)
-    print(format_rows(rows))
+        try:
+            rows, missing = evaluate_dirs(
+                Path(args.etiquetas), Path(args.expedientes), not args.sin_llm
+            )
+        except ValueError as exc:
+            print(exc, file=sys.stderr)
+            return 1
+    print(format_rows(rows, missing))
+    if args.salida:
+        Path(args.salida).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.salida).write_text(
+            json.dumps(report_json(rows, missing), ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        print(f"\nResultado guardado en {args.salida}", file=sys.stderr)
+    return 0
+
+
+def _cmd_agrupar(args: argparse.Namespace) -> int:
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    from tiendas3b.ingestion.agrupar import (
+        document_keys,
+        format_plan,
+        group_documents,
+        write_groups,
+    )
+    from tiendas3b.llm import get_chat_model, llm_parallel
+
+    root = Path(args.origen)
+    paths = sorted(p for p in root.rglob("*") if is_document_file(p))
+    if not paths:
+        print(f"No encontré PDFs ni imágenes en {root}.", file=sys.stderr)
+        return 1
+    llm = None if args.sin_llm else get_chat_model()
+    documents = []
+    for i, path in enumerate(paths, start=1):  # el OCR ya reparte los núcleos por página
+        print(f"\r[{i}/{len(paths)}] leyendo…", end="", file=sys.stderr, flush=True)
+        documents.append((path, load_document(path)))
+    print(file=sys.stderr)
+    keys = []
+    with ThreadPoolExecutor(max_workers=llm_parallel() if llm else 1) as pool:
+        futures = [pool.submit(document_keys, doc, path, llm) for path, doc in documents]
+        for i, future in enumerate(as_completed(futures), start=1):
+            print(f"\r[{i}/{len(paths)}] clasificando…", end="", file=sys.stderr, flush=True)
+            keys.append(future.result())
+    print(file=sys.stderr)
+    groups = group_documents(keys)
+    print(format_plan(groups, root))
+    if args.simular:
+        print("\nSimulación: no se copió nada. Quita --simular para crear las carpetas.")
+        return 0
+    write_groups(groups, Path(args.destino))
+    print(f"\nCopiados a {args.destino} (los originales no se tocaron).")
     return 0
 
 
 def _cmd_demo_pdfs(args: argparse.Namespace) -> int:
     for folder in write_demo_pdfs(Path(args.destino)):
         print(f"Escrito: {folder}")
+    return 0
+
+
+def _cmd_diagnostico(args: argparse.Namespace) -> int:
+    root = Path(args.carpeta)
+    paths = find_documents(root)
+    rows = []
+    for i, path in enumerate(paths, start=1):
+        print(f"\r[{i}/{len(paths)}] leyendo…", end="", file=sys.stderr, flush=True)
+        rows.append(diagnose(path))
+    print(file=sys.stderr)
+    if args.detalle:
+        print(format_details(rows, root) + "\n")
+    print(format_summary(rows))
     return 0
 
 
@@ -167,13 +244,30 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--expedientes", default=str(PROJECT_ROOT / "data" / "expedientes"))
     p.add_argument("--demo", action="store_true", help="Usa los casos ficticios en memoria.")
     p.add_argument("--sin-llm", action="store_true")
+    p.add_argument("--salida", help="Guarda resumen y filas en JSON (solo IDs y veredictos).")
     p.set_defaults(func=_cmd_evaluar)
+
+    p = sub.add_parser("agrupar", help="Arma expedientes desde documentos sueltos.")
+    p.add_argument("origen", nargs="?", default=str(PROJECT_ROOT / "data" / "raw"))
+    p.add_argument("--destino", default=str(PROJECT_ROOT / "data" / "expedientes"))
+    p.add_argument("--simular", action="store_true", help="Muestra el plan sin copiar nada.")
+    p.add_argument("--sin-llm", action="store_true")
+    p.set_defaults(func=_cmd_agrupar)
 
     p = sub.add_parser("demo-pdfs", help="Escribe los casos ficticios como PDFs.")
     p.add_argument("--destino", default=str(PROJECT_ROOT / "data" / "expedientes"))
     p.set_defaults(func=_cmd_demo_pdfs)
 
     sub.add_parser("estado", help="Configuración y salud.").set_defaults(func=_cmd_estado)
+
+    p = sub.add_parser("diagnostico", help="OCR y clasificador sobre documentos reales.")
+    p.add_argument("carpeta", nargs="?", default=str(PROJECT_ROOT / "data" / "raw"))
+    p.add_argument(
+        "--detalle",
+        action="store_true",
+        help="Una línea por archivo (trae nombres de archivo: no la compartas fuera del equipo).",
+    )
+    p.set_defaults(func=_cmd_diagnostico)
     sub.add_parser("grafo", help="Diagrama Mermaid del grafo.").set_defaults(func=_cmd_grafo)
 
     p = sub.add_parser("api", help="Levanta la API.")
@@ -185,7 +279,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(name)s: %(message)s")
+    setup_logging(console_level="WARNING")
     args = build_parser().parse_args(argv)
     code: int = args.func(args)
     return code

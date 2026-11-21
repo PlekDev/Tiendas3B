@@ -6,6 +6,8 @@ Este archivo dice **qué ya existe**, **quién hace qué**, **qué interfaz entr
 
 **Equipo:** Aaron (líder técnico) · Diego · Carlos · Andrés · Victor
 
+**El modelo (Ollama) corre en la PC de Andrés.** Cada quien apunta su `.env` a esa PC: ver [docs/AMBIENTE.md](docs/AMBIENTE.md).
+
 ---
 
 ## 0. Alcance del MVP (confirmado con el comité)
@@ -23,7 +25,7 @@ Este archivo dice **qué ya existe**, **quién hace qué**, **qué interfaz entr
 
 ## 1. Qué ya existe: el bosquejo
 
-Hay un bosquejo que corre de punta a punta en la rama `feature/victor-base-trustnode` (PR hacia `dev`). Toma ideas de TrustNode: ingesta con PyMuPDF, el LLM con JSON estricto y un reintento, reglas en cartuchos JSON y la API con FastAPI. Es un **punto de partida**: cada quien lo mejora en su parte.
+Hay un bosquejo que corre de punta a punta. Ya está en `main` (PR #1); falta llevarlo a `dev` (tarea A1). Toma ideas de TrustNode: ingesta con PyMuPDF, el LLM con JSON estricto y un reintento, reglas en cartuchos JSON y la API con FastAPI. Es un **punto de partida**: cada quien lo mejora en su parte.
 
 ### Arranque en 3 comandos
 
@@ -50,7 +52,7 @@ Más: `make api` (API en http://127.0.0.1:8000/docs), `make evaluar`, `make demo
 | CLI y evaluación | `analizar`, `ejemplo`, `evaluar`, `estado`, `grafo`, `api` | `cli.py`, `evaluacion.py` | Aaron / Andrés |
 | Expedientes ficticios | 4 casos (cumple, revisión, no cumple, incompleto) para trabajar sin datos de 3B | `demo.py` | Todos |
 | Interfaz (dashboard) | **Pendiente**. Guía lista en [docs/GUIA_DASHBOARD.md](docs/GUIA_DASHBOARD.md) | `frontend/` | Diego |
-| Logs y bitácora de auditoría | **Pendiente**. Hoy solo hay `logging` básico | `logs.py` (por crear) | Victor |
+| Logs y bitácora de auditoría | Listo (V6, V7): JSON por línea con `expediente_id` y `request_id`, valores del expediente redactados, bitácora por dictamen y `GET /api/v1/bitacora` | `logs.py` | Victor |
 | Cola de trabajos / modo servidor | **Pendiente** | `api/` | Aaron |
 | CI/CD y seguridad | CI actual pasa. Mejoras **pendientes** | `.github/workflows/` | Aaron |
 
@@ -81,8 +83,8 @@ Cada tarea dice cuándo está hecha y de qué depende. Si depende de alguien, la
 
 | # | Prioridad | Tarea | Hecha cuando | Mientras tanto |
 |---|---|---|---|---|
-| A1 | P0 | Revisar y fusionar el PR del bosquejo a `dev`. Incluye **cambios aditivos** a `schemas.py`: `confidence`, `method`, `severity`, `trace`, `reasons`, `processing_ms`, `llm_mode` | `dev` con el CI en verde | — |
-| A2 | P0 | Ollama en la PC "cerebro". Comparar `llama3.1:8b` contra `qwen2.5:14b` con `tiendas3b evaluar` | `tiendas3b estado` dice "LLM responde: sí" y ya hay un tiempo medido por expediente | El modo heurístico (`LLM_PROVIDER=none`) |
+| A1 | P0 | Fusionar `main` en `dev`: el bosquejo entró a `main` por el PR #1 y `dev` tiene tus pruebas nuevas (`conftest.py`, `test_real_expedientes.py`), que usan las mismas firmas. Revisar los **cambios aditivos** a `schemas.py`: `confidence`, `method`, `severity`, `trace`, `reasons`, `processing_ms`, `llm_mode` | `main` y `dev` iguales, con el CI en verde | — |
+| A2 | P0 | Apoyar a Andrés a dejar el modelo accesible por la red (N0) y ajustar `llm.py` si hace falta (timeouts, `LLM_NUM_CTX`) | Todo el equipo ve "LLM responde: sí" en `tiendas3b estado` | El modo heurístico (`LLM_PROVIDER=none`) |
 | A3 | P0 | Decidir con Diego el idioma del contrato (hoy en inglés: `recommendation`, `document_analyses`). Se decide una vez y no se cambia | Anotado en `estado/aaron.md` | — |
 | A4 | P1 | **Cola de trabajos**: `POST /api/v1/trabajos` → id; `GET /api/v1/trabajos/{id}` → estado, posición y resultado. `ThreadPoolExecutor` con `MAX_WORKERS` (2) y resultados en memoria con caducidad | 3 navegadores suben expedientes a la vez y los tres terminan | `POST /api/v1/analizar` (síncrono) |
 | A5 | P1 | **CI/CD**: proteger `main` y `dev` (PR + CI verde), job que compile `frontend/`, `pip-audit` y Dependabot, tag `v0.1-demo` para la demo | Rama protegida y CI con 2 jobs | — |
@@ -114,6 +116,7 @@ Sigue la guía [docs/GUIA_DASHBOARD.md](docs/GUIA_DASHBOARD.md): pantallas, de d
 
 | # | Prioridad | Tarea | Hecha cuando | Mientras tanto |
 |---|---|---|---|---|
+| N0 | P0 | **Servir el modelo en tu PC** para el equipo ([docs/AMBIENTE.md](docs/AMBIENTE.md) §1) y publicar la IP en `estado/andres.md`. Comparar `llama3.1:8b` contra `qwen2.5:14b` con `tiendas3b evaluar` | Todos ven "LLM responde: sí" y hay un tiempo medido por expediente | El modo heurístico |
 | N1 | P0 | Etiquetas reales en `evaluacion/etiquetas.json` (carpeta → veredicto), del comité o 5 hechas a mano. Solo IDs y veredictos, nunca contenido | `tiendas3b evaluar` corre sobre expedientes reales | Las 4 etiquetas ficticias |
 | N2 | P0 | Calibrar umbrales y severidades en `CROSS_CHECKS` y en los cartuchos con resultados reales | **0 falsos "Cumple"** en la evaluación | — |
 | N3 | P1 | Reglas específicas: vigencias (cuando la guía las confirme) y compatibilidad comercial | Reglas activas con su prueba | — |
@@ -124,11 +127,11 @@ Sigue la guía [docs/GUIA_DASHBOARD.md](docs/GUIA_DASHBOARD.md): pantallas, de d
 
 | # | Prioridad | Tarea | Hecha cuando | Mientras tanto |
 |---|---|---|---|---|
-| V1 | P0 | Ambiente de las 5 laptops: Python 3.11, `make setup`, `tesseract-ocr-spa` (y Node para Diego) | `make check` en verde en todas | — |
-| V2 | P0 | Con los documentos reales **en local**: cuántas páginas son escaneo (`LoadedPage.source == "ocr"`) y qué tan bueno sale el OCR | Números en `estado/victor.md` | — |
-| V3 | P0 | Correr el clasificador sobre los PDFs reales y ajustar `_KEYWORDS` | ≥ 95 % de acierto, o lista de los que fallan | — |
+| V1 | P0 | Ambiente de las 5 laptops con [docs/AMBIENTE.md](docs/AMBIENTE.md): Python 3.11, `make setup`, `tesseract-ocr-spa`, Node para Diego y conexión al modelo de Andrés | `make check` en verde en todas | — |
+| V2 | P0 | Con los documentos reales **en local**: cuántas páginas son escaneo y qué tan bueno sale el OCR. Usar `tiendas3b diagnostico data/raw` (el resumen solo trae conteos) | Números en `estado/victor.md` | — |
+| V3 | P0 | Correr el clasificador sobre los PDFs reales y ajustar `_KEYWORDS`. `tiendas3b diagnostico` mide el acierto si los PDFs están en carpetas por tipo | ≥ 95 % de acierto, o lista de los que fallan | — |
 | V4 | P0 | Guion del pitch v1 (`pitch/guion_v1.md`) | Leído en voz alta en 3:00 | Cifras en corchetes hasta tener N4 |
-| V5 | P1 | **Armar expedientes**: los ZIP vienen por tipo de documento, no por inmueble. Comando `tiendas3b agrupar` que junte por clave catastral o dirección, o por la convención de nombres que diga el comité | Carpetas `data/expedientes/<ID>/` con sus documentos | Los expedientes ficticios |
+| V5 | P1 | **Armar expedientes**: los ZIP vienen por tipo de documento, no por inmueble. `tiendas3b agrupar data/raw --simular` propone los expedientes (une por clave catastral, cuenta, folio o misma dirección y número) y sin `--simular` los copia a `data/expedientes/`. Si el comité da una convención, esa manda | Carpetas `data/expedientes/<ID>/` revisadas a mano | Los expedientes ficticios |
 | V6 | P1 | **Logs estructurados** (`logs.py`): una línea JSON por evento en `logs/tiendas3b.jsonl` con `expediente_id`, `request_id`, agente, ms y resultado; consola legible; nivel con `LOG_LEVEL`. Agregar `logs/` al `.gitignore` | Cada análisis deja su rastro completo por agente | — |
 | V7 | P1 | **Bitácora de auditoría y confidencialidad**: un registro por dictamen (fecha, expediente, veredicto, confianza, modelo, huella de los cartuchos de reglas, duración) y `GET /api/v1/bitacora` para el dashboard. Filtro con prueba que impida escribir texto de documentos o nombres de propietarios en los logs | Se puede reconstruir qué se dictaminó, cuándo y con qué reglas | — |
 | V8 | P1 | Video de respaldo (con Diego) y 3 ensayos con la demo real | Video guardado en 2 laptops | — |
@@ -140,7 +143,7 @@ Sigue la guía [docs/GUIA_DASHBOARD.md](docs/GUIA_DASHBOARD.md): pantallas, de d
 
 | Diferenciador | Por qué le importa a 3B | Dueño | Prioridad |
 |---|---|---|---|
-| **PC cerebro + auditores en el navegador** | Una sola máquina con GPU y modelo. Los demás abren la interfaz por la red local y no instalan nada. Los documentos no salen de esa PC | Aaron (A4) + Diego (D5) | P1 |
+| **PC cerebro + auditores en el navegador** | Una sola máquina con GPU y modelo (la de Andrés). Los demás abren la interfaz por la red local y no instalan nada. Los documentos no salen de esa PC | Aaron (A4) + Diego (D5) | P1 |
 | **Bitácora auditable** | Cada dictamen queda registrado con fecha, modelo y versión de las reglas. El equipo legal puede explicar cualquier decisión después | Victor (V6, V7) | P1 |
 | **Dashboard pensado para el equipo legal** | Veredicto en 3 segundos y cada hallazgo a un clic de su cita | Diego (D1–D4) | P0–P1 |
 | **Cola de trabajos** | Varios auditores a la vez sin saturar el LLM, que es el cuello de botella. Cada quien ve su posición en la fila | Aaron (A4) | P1 |
