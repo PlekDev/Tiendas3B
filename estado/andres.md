@@ -4,7 +4,7 @@
 
 - **Listo:**
   - N0: Ollama en mi PC (RTX 4060, 8 GB) con `llama3.1:8b`, `qwen2.5:7b` y `nomic-embed-text`. Se sirve como dice `docs/AMBIENTE.md` §1.
-    **IP (hotspot): `172.31.13.101`** → `OLLAMA_BASE_URL=http://172.31.13.101:11434`. Si cambia de red, la actualizo aquí.
+    **IP (hotspot): `192.168.137.13`** → `OLLAMA_BASE_URL=http://192.168.137.13:11434`. Si cambia de red, la actualizo aquí.
   - Comparación de modelos (casos ficticios, con LLM):
 
     | Modelo | Aciertos | Falsos Cumple | Seg./expediente |
