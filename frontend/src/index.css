@@ -2655,3 +2655,21 @@ body {
   .vtip { max-width: 80%; }
   .crow .copybtn { opacity: 1; }
 }
+
+/* ---------- Pantallas grandes: escala la interfaz en vez de dejar márgenes enormes ----------
+   A 100 % de zoom en 1920 px el contenido se veía chico y lejano; así llena el ancho como en 1280 px. */
+@media (min-width: 1500px) {
+  html { zoom: 1.1; }
+}
+@media (min-width: 1700px) {
+  html { zoom: 1.25; }
+}
+@media (min-width: 1900px) {
+  html { zoom: 1.4; }
+}
+@media (min-width: 1500px) {
+  .page,
+  .dict {
+    max-width: none;
+  }
+}

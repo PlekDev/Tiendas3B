@@ -19,7 +19,7 @@
 .nx-back:hover { color: var(--y2k-red); }
 .nx-title {
   margin: 0; font-family: "Archivo", system-ui, sans-serif; font-weight: 800; letter-spacing: -0.035em;
-  font-size: clamp(34px, 4.4vw, 64px); line-height: 1.04; color: var(--ink);
+  font-size: clamp(34px, 3.8vw, 58px); line-height: 1.04; color: var(--ink);
 }
 .nx-title em { font-style: normal; }
 .y2k-chrome-text { color: var(--tb-red); }
@@ -321,3 +321,5 @@
   .y2k-slot.is-archiving { animation: y2k-fade 0.25s forwards !important; }
   @keyframes y2k-fade { to { opacity: 0; } }
 }
+
+@media (min-width: 1100px) { .nx-title { white-space: nowrap; } }
