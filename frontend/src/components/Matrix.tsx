@@ -1,60 +1,54 @@
-import type { Report } from "../types";
-import { DOC_SHORT } from "../labels";
+import { useState } from "react";
+import { TONE_ICON } from "../labels";
+import { MATRIX_COLS, type MatrixCell } from "../model";
 
-/** Matriz documento × regla (adaptación de ComplianceHeatmap). */
-export function Matrix({ report }: { report: Report }) {
-  const rules = [
-    ...new Map(
-      report.document_analyses.flatMap((a) => a.rule_evaluations).map((r) => [r.rule_id, r]),
-    ).values(),
-  ];
-  if (!rules.length) return <p className="muted">No hay reglas evaluadas.</p>;
+/** Documento × regla: cada celda agrupa las reglas de ese tema en ese documento. */
+export function Matrix({ rows }: { rows: { doc: string; cells: MatrixCell[] }[] }) {
+  const [sel, setSel] = useState<{ key: string; text: string } | null>(null);
   return (
-    <div className="table-wrap">
-      <table className="table matrix">
-        <thead>
-          <tr>
-            <th>Documento</th>
-            {rules.map((r) => (
-              <th key={r.rule_id} title={r.description}>
-                {r.rule_id}
-              </th>
+    <section className="sec">
+      <div className="sec__head">
+        <h2 className="h2">Documento × regla</h2>
+        <span className="small muted">Cada celda es un tema revisado en un documento.</span>
+      </div>
+      <div className="card scroll matrix">
+        <div className="matrix__grid">
+          <div className="matrix__row matrix__row--head">
+            <span />
+            {MATRIX_COLS.map((c) => (
+              <span key={c.key}>{c.label}</span>
             ))}
-          </tr>
-        </thead>
-        <tbody>
-          {report.document_analyses.map((a) => (
-            <tr key={a.document_name}>
-              <th scope="row">
-                {DOC_SHORT[a.document_type]}
-                <div className="muted small">{a.document_name}</div>
-              </th>
-              {rules.map((r) => {
-                const ev = a.rule_evaluations.find((x) => x.rule_id === r.rule_id);
-                if (!ev)
-                  return (
-                    <td key={r.rule_id} className="cell cell--na" title="No aplica">
-                      –
-                    </td>
-                  );
-                const cls = ev.passed ? "ok" : ev.severity === "critical" ? "bad" : "warn";
-                const label = ev.passed ? "Cumple" : ev.severity === "critical" ? "Bloqueante" : "Revisar";
+          </div>
+          {rows.map((r, i) => (
+            <div key={r.doc} className="matrix__row">
+              <span className="small" style={{ fontWeight: 600 }}>
+                {r.doc}
+              </span>
+              {r.cells.map((c, j) => {
+                const key = `${i}-${j}`;
+                const text = `${r.doc} × ${MATRIX_COLS[j].label}: ${c.detail}`;
+                const show = () => setSel({ key, text });
                 return (
-                  <td
-                    key={r.rule_id}
-                    className={`cell cell--${cls}`}
-                    title={`${ev.description}\n${ev.details}`}
+                  <button
+                    key={key}
+                    className={`mcell t-${c.tone}${sel?.key === key ? " is-on" : ""}`}
+                    aria-label={text}
+                    title={text}
+                    onMouseEnter={show}
+                    onFocus={show}
+                    onClick={show}
                   >
-                    <span aria-hidden>{ev.passed ? "✓" : ev.severity === "critical" ? "✕" : "!"}</span>
-                    <span className="sr">{label}</span>
-                  </td>
+                    {TONE_ICON[c.tone]}
+                  </button>
                 );
               })}
-            </tr>
+            </div>
           ))}
-        </tbody>
-      </table>
-      <p className="muted small">Pasa el cursor sobre una celda para ver la regla y el detalle.</p>
-    </div>
+          <div className="matrix__detail" aria-live="polite">
+            {sel?.text ?? "Pasa el cursor o toca una celda para ver la regla y su detalle."}
+          </div>
+        </div>
+      </div>
+    </section>
   );
 }

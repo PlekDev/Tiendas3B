@@ -1,83 +1,54 @@
-import type { DocType, DocumentAnalysis, Evidence, Report } from "../types";
-import { CROSS_ROWS, DOC_ORDER, DOC_SHORT, fieldLabel } from "../labels";
-import { SeverityChip } from "./Bits";
+import { DOC_ORDER, DOC_SHORT } from "../labels";
+import type { CompRow, EvTarget } from "../model";
+import { Chip } from "./Bits";
 
-function valueOf(a: DocumentAnalysis | undefined, field: string | undefined) {
-  if (!a || !field) return undefined;
-  return a.extracted_fields.find((f) => f.name === field && (f.value ?? "").trim());
-}
-
-/** Una fila por cruce, una columna por documento (los 5 cruces de CROSS_CHECKS). */
-export function Compare({
-  report,
-  onEvidence,
-}: {
-  report: Report;
-  onEvidence: (e: Evidence) => void;
-}) {
-  const byType = new Map<DocType, DocumentAnalysis>();
-  report.document_analyses.forEach((a) => {
-    if (!byType.has(a.document_type)) byType.set(a.document_type, a);
-  });
-
+/** Una fila por cruce (CROSS_CHECKS), una columna por documento. */
+export function Compare({ rows, onEvidence }: { rows: CompRow[]; onEvidence: (t: EvTarget) => void }) {
   return (
-    <div className="table-wrap">
-      <table className="table">
-        <thead>
-          <tr>
-            <th>Dato</th>
-            {DOC_ORDER.map((t) => (
-              <th key={t}>{DOC_SHORT[t]}</th>
-            ))}
-            <th>Resultado</th>
-          </tr>
-        </thead>
-        <tbody>
-          {CROSS_ROWS.map((row) => {
-            const issue = report.cross_validation_issues.find((i) => i.field_name === row.key);
-            const found = DOC_ORDER.filter((t) => valueOf(byType.get(t), row.fields[t]));
-            return (
-              <tr key={row.key} className={issue ? "row--flag" : ""}>
-                <th scope="row">{row.label}</th>
-                {DOC_ORDER.map((t) => {
-                  const f = valueOf(byType.get(t), row.fields[t]);
-                  if (!row.fields[t]) return <td key={t} className="muted">—</td>;
-                  if (!f) return <td key={t} className="muted">No encontrado</td>;
-                  return (
-                    <td key={t}>
-                      {f.evidence ? (
-                        <button
-                          className="link"
-                          onClick={() => onEvidence(f.evidence!)}
-                          title="Ver en el documento"
-                        >
-                          {f.value}
-                        </button>
-                      ) : (
-                        f.value
-                      )}
-                    </td>
-                  );
-                })}
+    <section className="sec">
+      <div className="sec__head">
+        <h2 className="h2">Comparación entre documentos</h2>
+        <span className="small muted">Toca cualquier valor para ver dónde aparece en el documento.</span>
+      </div>
+      <div className="card scroll">
+        <table className="tbl tbl--comp">
+          <thead>
+            <tr>
+              <th style={{ width: "15%" }}>Dato</th>
+              {DOC_ORDER.map((t) => (
+                <th key={t}>{DOC_SHORT[t]}</th>
+              ))}
+              <th style={{ width: "14%" }}>Resultado</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.key} className={r.tone === "warn" ? "row-warn" : r.tone === "bad" ? "row-bad" : ""}>
+                <td style={{ fontWeight: 600, padding: "12px 14px" }}>{r.label}</td>
+                {r.cells.map((c, i) => (
+                  <td key={i} className="cellwrap">
+                    <button
+                      className={`cmp cmp--${c.kind}${c.kind === "dev" ? ` t-${r.tone}` : ""}`}
+                      disabled={!c.target}
+                      onClick={() => c.target && onEvidence(c.target)}
+                      title={c.target ? "Ver en el documento" : undefined}
+                    >
+                      {c.kind === "dev" ? `${r.tone === "bad" ? "✕" : "!"} ${c.label}` : c.label}
+                    </button>
+                  </td>
+                ))}
                 <td>
-                  {issue ? (
-                    <>
-                      <SeverityChip severity={issue.severity} />
-                      <div className="small">{issue.description}</div>
-                    </>
-                  ) : found.length >= 2 ? (
-                    <span className="chip chip--ok">✓ Coincide</span>
+                  {r.tone === "na" ? (
+                    <span className="small faint">{r.result}</span>
                   ) : (
-                    <span className="muted small">
-                      Sin datos suficientes para comparar ({fieldLabel(row.key)})
-                    </span>
+                    <Chip tone={r.tone}>{r.result}</Chip>
                   )}
                 </td>
               </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
   );
 }

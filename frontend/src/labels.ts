@@ -23,13 +23,30 @@ export const DOC_SHORT: Record<DocType, string> = {
   desconocido: "Sin identificar",
 };
 
-export const VERDICT_UI: Record<Verdict, { cls: string; icon: string; short: string }> = {
+/** Tono visual: siempre palabra + color + ícono, y borde punteado para lo incierto o faltante. */
+export type Tone = "ok" | "warn" | "bad" | "info" | "doubt" | "miss" | "na" | "neutral";
+
+export const TONE_ICON: Record<Tone, string> = {
+  ok: "✓",
+  warn: "!",
+  bad: "✕",
+  info: "i",
+  doubt: "?",
+  miss: "✕",
+  na: "–",
+  neutral: "?",
+};
+
+export const SEV_TONE: Record<Severity, Tone> = { critical: "bad", warning: "warn", info: "info" };
+export const SEV_RANK: Record<Severity, number> = { critical: 0, warning: 1, info: 2 };
+
+export const VERDICT_UI: Record<Verdict, { cls: Tone; icon: string; short: string }> = {
   Cumple: { cls: "ok", icon: "✓", short: "Cumple" },
   "Requiere revisión": { cls: "warn", icon: "!", short: "Requiere revisión" },
   "No cumple": { cls: "bad", icon: "✕", short: "No cumple" },
 };
 
-export const SEVERITY_UI: Record<Severity, { cls: string; icon: string; label: string }> = {
+export const SEVERITY_UI: Record<Severity, { cls: Tone; icon: string; label: string }> = {
   critical: { cls: "bad", icon: "✕", label: "Bloqueante" },
   warning: { cls: "warn", icon: "!", label: "Revisar" },
   info: { cls: "info", icon: "i", label: "Nota" },
@@ -124,4 +141,30 @@ export function pct(x: number): string {
 
 export function seconds(ms: number): string {
   return ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} s`;
+}
+
+/** Pasos principales del grafo (src/tiendas3b/graph). Los extractor_* se agrupan en Extractores. */
+export const AGENT_UI: Record<string, { label: string; desc: string }> = {
+  clasificador: { label: "Clasificador", desc: "identifica qué documento es cada archivo" },
+  extractores: { label: "Extractores", desc: "leen los datos de cada documento" },
+  supervisor_reintento: { label: "Reintento", desc: "vuelve a leer lo que faltó" },
+  validador_normativo: { label: "Validador", desc: "aplica las reglas de cada documento" },
+  validacion_cruzada: { label: "Cruces", desc: "compara los datos entre documentos" },
+  dictaminador: { label: "Dictamen", desc: "redacta el veredicto y sus razones" },
+};
+
+export function methodLabel(method: string): string {
+  if (method === "llm") return "Modelo de IA";
+  if (method === "heuristica") return "Reglas y patrones";
+  return method || "—";
+}
+
+export function shortDate(ms: number): string {
+  return new Date(ms).toLocaleString("es-MX", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }

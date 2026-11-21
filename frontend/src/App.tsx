@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
-import type { ApiStatus } from "./types";
+import { AnimatePresence, MotionConfig, motion } from "motion/react";
+import type { ApiStatus, Entry } from "./types";
 import { analizar, getEjemplo, getStatus } from "./api";
 import { rememberFiles, useBandeja } from "./store";
+import { Chip } from "./components/Bits";
 import { Inbox } from "./components/Inbox";
 import { NewExpediente } from "./components/NewExpediente";
 import { Dictamen } from "./components/Dictamen";
 
-type View = { name: "inbox" } | { name: "new" } | { name: "dictamen"; id: string };
+type View = { name: "inbox" } | { name: "new"; id?: string } | { name: "dictamen"; id: string };
 
 function useTheme() {
   const [theme, setTheme] = useState<"light" | "dark">(() => {
@@ -38,8 +40,16 @@ export default function App() {
   const { entries, upsert, remove } = useBandeja();
 
   useEffect(() => {
-    getStatus().then(setStatus).catch(() => setStatus("error"));
+    const check = () => getStatus().then(setStatus).catch(() => setStatus("error"));
+    check();
+    const t = setInterval(check, 15000);
+    return () => clearInterval(t);
   }, []);
+
+  const go = (v: View) => {
+    setView(v);
+    window.scrollTo({ top: 0 });
+  };
 
   const run = useCallback(
     async (id: string, job: () => ReturnType<typeof getEjemplo>) => {
@@ -48,9 +58,9 @@ export default function App() {
       upsert({ id, createdAt: Date.now(), status: "procesando" });
       try {
         const report = await job();
-        upsert({ id: report.expediente_id, createdAt: Date.now(), status: "listo", report });
         if (report.expediente_id !== id) remove(id);
-        setView({ name: "dictamen", id: report.expediente_id });
+        upsert({ id: report.expediente_id, createdAt: Date.now(), status: "listo", report });
+        go({ name: "dictamen", id: report.expediente_id });
       } catch (e) {
         const msg = e instanceof Error ? e.message : "Error desconocido";
         upsert({ id, createdAt: Date.now(), status: "error", error: msg });
@@ -68,74 +78,116 @@ export default function App() {
   };
   const onExample = (caso: string) => void run(`ejemplo-${caso}`, () => getEjemplo(caso));
 
+  const openEntry = (e: Entry) => {
+    if (e.report) go({ name: "dictamen", id: e.id });
+    else {
+      setError(e.status === "error" ? (e.error ?? null) : null);
+      go({ name: "new", id: e.id });
+    }
+  };
+
   const current = view.name === "dictamen" ? entries.find((e) => e.id === view.id) : undefined;
+  const offline = status === "error";
+  const aiAvailable = !!status && status !== "error" && status.llm_reachable;
+  const screen = view.name === "dictamen" ? "inbox" : view.name;
 
   return (
-    <>
+    <MotionConfig reducedMotion="user">
       <header className="topbar">
-        <button className="brand" onClick={() => setView({ name: "inbox" })}>
-          Tiendas 3B <span className="muted">· Dictamen de expedientes</span>
+        <button className="brand" onClick={() => go({ name: "inbox" })} aria-label="Tiendas 3B, ir a la bandeja">
+          <span className="brand__mark" aria-hidden>
+            <span>B</span>
+            <span>BB</span>
+          </span>
+          <span className="brand__text">
+            <b>Tiendas 3B</b>
+            <span>Dictamen de expedientes</span>
+          </span>
         </button>
-        <div className="row">
-          {status === "error" ? (
-            <span className="chip chip--bad" title="Inicia la API con make api">
-              ✕ Sin conexión con la API
-            </span>
+        <nav className="nav">
+          <button className={screen === "inbox" ? "is-on" : ""} onClick={() => go({ name: "inbox" })}>
+            Bandeja
+          </button>
+          <button className={screen === "new" ? "is-on" : ""} onClick={() => go({ name: "new" })}>
+            Nuevo expediente
+          </button>
+        </nav>
+        <div className="topbar__right">
+          {offline ? (
+            <Chip tone="bad">Sin conexión con la API</Chip>
           ) : status && status.llm_reachable ? (
-            <span className="chip chip--ok">✓ IA conectada: {status.llm_mode}</span>
+            <Chip tone="ok">IA conectada</Chip>
           ) : status ? (
-            <span className="chip chip--info" title="El análisis sigue funcionando">
-              i Modo sin IA (reglas y patrones)
+            <span title="El análisis sigue funcionando con reglas y patrones">
+              <Chip tone="info">Modo sin IA</Chip>
             </span>
           ) : null}
-          <button className="btn btn--ghost" onClick={toggleTheme}>
-            {theme === "dark" ? "Modo claro" : "Modo oscuro"}
+          <button className="btn" onClick={toggleTheme} aria-label="Cambiar tema">
+            <span className="theme-icon" aria-hidden />
+            {theme === "dark" ? "Claro" : "Oscuro"}
           </button>
         </div>
       </header>
+      {offline && (
+        <div role="status" className="banner">
+          <span className="dot t-bad" aria-hidden>
+            ✕
+          </span>
+          Sin conexión con la API. Inicia el servidor con make api para analizar expedientes.
+        </div>
+      )}
 
-      <main className="page">
-        {error && (
-          <div className="alert" role="alert">
-            <strong>No pudimos completar el análisis.</strong> Revisa los archivos e inténtalo de
-            nuevo.
-            <details>
-              <summary className="small">Detalle técnico</summary>
-              <code>{error}</code>
-            </details>
-            <button className="btn" onClick={() => setError(null)}>
-              Cerrar
-            </button>
-          </div>
-        )}
-        {view.name === "inbox" && (
-          <Inbox
-            entries={entries}
-            onOpen={(id) => setView({ name: "dictamen", id })}
-            onNew={() => setView({ name: "new" })}
-            onRemove={remove}
-          />
-        )}
-        {view.name === "new" && (
-          <NewExpediente
-            busy={busy}
-            onAnalyze={onAnalyze}
-            onExample={onExample}
-            onCancel={() => setView({ name: "inbox" })}
-          />
-        )}
-        {view.name === "dictamen" &&
-          (current?.report ? (
-            <Dictamen report={current.report} onBack={() => setView({ name: "inbox" })} />
-          ) : (
-            <p>
-              Expediente no encontrado.{" "}
-              <button className="link" onClick={() => setView({ name: "inbox" })}>
-                Volver a la bandeja
-              </button>
-            </p>
-          ))}
-      </main>
-    </>
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={view.name === "dictamen" ? `d-${view.id}` : view.name}
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -4 }}
+          transition={{ duration: 0.18, ease: "easeOut" }}
+        >
+          {view.name === "inbox" && (
+            <Inbox
+              entries={entries}
+              onOpen={openEntry}
+              onNew={() => go({ name: "new" })}
+              onExample={() => onExample("revision")}
+            />
+          )}
+          {view.name === "new" && (
+            <NewExpediente
+              busy={busy}
+              aiAvailable={aiAvailable}
+              initialId={view.id}
+              error={error}
+              onAnalyze={onAnalyze}
+              onExample={onExample}
+              onCancel={() => go({ name: "inbox" })}
+              onDismissError={() => setError(null)}
+            />
+          )}
+          {view.name === "dictamen" &&
+            (current?.report ? (
+              <Dictamen
+                entry={current}
+                onBack={() => go({ name: "inbox" })}
+                onRemove={() => {
+                  remove(current.id);
+                  go({ name: "inbox" });
+                }}
+                onUpload={() => go({ name: "new", id: current.id })}
+              />
+            ) : (
+              <main className="page">
+                <p>
+                  Expediente no encontrado.{" "}
+                  <button className="linkbtn" onClick={() => go({ name: "inbox" })}>
+                    Volver a la bandeja
+                  </button>
+                </p>
+              </main>
+            ))}
+        </motion.div>
+      </AnimatePresence>
+    </MotionConfig>
   );
 }
