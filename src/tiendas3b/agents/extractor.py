@@ -81,18 +81,82 @@ def _field(
 # --------------------------------------------------------------------------- heurística
 
 
+_NEXT_FIELD = re.compile(
+    r"\s+(?:r\.?f\.?c|regimen|periodo(?:\s+de\s+pago)?|valor(?:\s+catastral)?|ubicacion|domicilio|clave|cuenta|superficie|uso\s*cfdi|c\.?p\.?|fecha|subsidio|observaciones)\s*[:.-]",
+    re.IGNORECASE,
+)
+_TITLE_WORDS = {
+    "y",
+    "de",
+    "del",
+    "o",
+    "constancia",
+    "licencia",
+    "dictamen",
+    "oficial",
+    "predial",
+    "catastral",
+}
+
+
+def _clean_value(raw: str) -> str:
+    m = _NEXT_FIELD.search(raw)
+    if m:
+        raw = raw[: m.start()]
+    val = raw.strip(" :;.-|/")
+    # Quitar residuos de etiquetas compuestas como "PROPIETARIO / POSEEDOR"
+    val = re.sub(r"^(?:poseedor|propietario|contribuyente)\s+", "", val, flags=re.IGNORECASE)
+    return val.strip(" :;.-|/")
+
+
+# funcion que permite diferentes delimitadores
 def _value_after_label(line: str, label: str) -> str | None:
     norm = normalize(line)
-    if not (norm == label or norm.startswith(label + " ")):
-        return None
-    if ":" in line:
-        value = line.split(":", 1)[1].strip()
-        return value or None
-    if len(label.split()) < 2:  # "ALINEAMIENTO Y NÚMERO OFICIAL" es un título, no un dato
-        return None
-    words = line.split()
-    value = " ".join(words[len(label.split()) :]).strip()
-    return value or None
+    label_norm = normalize(label)
+
+    # Coincidencia al inicio de línea
+    if norm.startswith(label_norm + " ") or norm == label_norm:
+        if norm == label_norm:
+            return None
+        if ":" in line:
+            value = line.split(":", 1)[1]
+            cleaned = _clean_value(value)
+            return cleaned or None
+
+        # Delimitadores frecuentes sin dos puntos: ".-", " - ", " / ", " | "
+        for sep in (" .- ", ".-", " - ", " / ", " | "):
+            if sep in line:
+                parts = line.split(sep, 1)
+                if normalize(parts[0]) == label_norm:
+                    cleaned = _clean_value(parts[1])
+                    if cleaned:
+                        return cleaned
+
+        words = line.split()
+        label_words = label_norm.split()
+        if len(words) <= len(label_words):
+            return None
+
+        remainder_words = words[len(label_words) :]
+        # Evita confundir títulos como "ALINEAMIENTO Y NÚMERO OFICIAL" con datos
+        if len(label_words) < 2 and remainder_words[0].lower() in _TITLE_WORDS:
+            return None
+
+        value = " ".join(remainder_words)
+        cleaned = _clean_value(value)
+        return cleaned or None
+
+    # Coincidencia de etiqueta en medio de la línea con dos puntos (ej. en prosa legal)
+    pattern = rf"(?:^|\s){re.escape(label_norm)}\s*[:.-]\s*(.+)$"
+    match = re.search(pattern, norm)
+    if match:
+        # Extraer desde la línea original para conservar mayúsculas y acentos
+        raw_match = re.search(rf"(?:^|\s){re.escape(label)}\s*[:.-]\s*(.+)$", line, re.IGNORECASE)
+        val = raw_match.group(1) if raw_match else match.group(1)
+        cleaned = _clean_value(val)
+        return cleaned or None
+
+    return None
 
 
 def _is_bare_label(line: str, label: str) -> bool:
@@ -116,16 +180,36 @@ def _find_label(
     return None
 
 
-_AREA = re.compile(r"(\d[\d,]*(?:\.\d+)?)\s*(m2|m²|mts2|mts\.?|metros cuadrados)", re.IGNORECASE)
+_AREA_SUFFIX = re.compile(
+    r"(\d[\d,]*(?:\.\d+)?)\s*(m2|m²|m\?|m'|mts2|mts\.?|metros cuadrados)", re.IGNORECASE
+)
+_AREA_PREFIX = re.compile(
+    r"(?:terreno|superficie|sup\.?)\s*(?:\(m[2²\?]\)|m[2²\?]|propio)?\s*[:.-]?\s*(\d[\d,]*(?:\.\d+)?)\s*(?:m2|m²|m\?|mts2|metros)?",
+    re.IGNORECASE,
+)
 
 
 def _find_area(doc: LoadedDocument) -> tuple[str, LoadedPage, str, float] | None:
     for page in doc.pages:
         for line in page.text.splitlines():
-            if "superficie" in normalize(line):
-                match = _AREA.search(line)
-                if match:
-                    return match.group(0), page, line, CONF_LABEL_NEXT_LINE
+            norm = normalize(line)
+            if not any(k in norm for k in ("superficie", "terreno", "sup")):
+                continue
+            # Priorizar terreno sobre construcción
+            if "construccion" in norm and "terreno" not in norm:
+                continue
+            m_suf = _AREA_SUFFIX.search(line)
+            if m_suf:
+                val = f"{m_suf.group(1)} m2"
+                return val, page, line, CONF_LABEL_NEXT_LINE
+            m_pre = _AREA_PREFIX.search(line)
+            if m_pre:
+                num = m_pre.group(1).replace(",", "")
+                try:
+                    if float(num) > 0:
+                        return f"{num} m2", page, line, CONF_LABEL_NEXT_LINE
+                except ValueError:
+                    pass
     return None
 
 
@@ -182,11 +266,15 @@ def _verify(name: str, raw: _LLMField, doc: LoadedDocument) -> ExtractedField | 
                 conf = CONF_LLM_VERIFIED - 0.05
                 return _field(name, raw.valor, doc, page.page_number, raw.cita, conf, "llm")
     for page in doc.pages:  # sin cita verificable, pero el valor sí está en el texto
-        for line in page.text.splitlines():
-            if quote_in_text(raw.valor, line):
-                return _field(
-                    name, raw.valor, doc, page.page_number, line, CONF_LLM_VALUE_ONLY, "llm"
-                )
+        if quote_in_text(raw.valor, page.text):
+            snippet_line = page.text
+            for line in page.text.splitlines():
+                if quote_in_text(raw.valor, line):
+                    snippet_line = line
+                    break
+            return _field(
+                name, raw.valor, doc, page.page_number, snippet_line, CONF_LLM_VALUE_ONLY, "llm"
+            )
     return ExtractedField(name=name, value=raw.valor, confidence=CONF_LLM_UNVERIFIED, method="llm")
 
 

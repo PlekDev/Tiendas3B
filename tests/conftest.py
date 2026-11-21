@@ -7,6 +7,12 @@ import pytest
 from tiendas3b.ingestion.pdf_loader import LoadedDocument, LoadedPage
 
 
+@pytest.fixture(autouse=True)
+def _ocr_cache_en_tmp(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Las pruebas no escriben en data/cache del repo."""
+    monkeypatch.setenv("OCR_CACHE_DIR", str(tmp_path / "ocr-cache"))
+
+
 @pytest.fixture
 def expediente_completo_docs() -> list[LoadedDocument]:
     """Genera un expediente sintético con los 4 tipos documentales mínimos."""
