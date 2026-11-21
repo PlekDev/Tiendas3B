@@ -16,5 +16,10 @@
 - **Bloqueado por:** nada
 - **Para el equipo:**
   - Carlos y Andrés: el texto de casi todo viene de OCR, así que esperen errores de lectura (acentos, 0/O, 1/l); conviene comparar con tolerancia
+  - **Carlos — extracción sobre los 63 documentos reales** (solo conteos):
+    - **Sin LLM: 85/364 campos (23 %)**. Las etiquetas buscan "Etiqueta: valor" y los documentos son escaneos, varios en prosa (escrituras); algunas "llaves" salen como renglones completos
+    - **Con `llama3.1:8b`: 302/365 campos (83 %)**, 296 con la cita verificada en el texto de OCR (98 %). ~17 s por documento
+    - Por tipo con LLM: Alineamiento 100/108 · Predial 72/85 · Uso de Suelo 91/112 · **Escrituras 39/60 (la más baja)**
+    - Conclusión: en documentos reales la ruta buena es el LLM; la heurística solo sirve de respaldo
   - Al descomprimir los ZIP, borrar `__MACOSX`. Andrés: el filtro que pediste para `agrupar` ya está en el PR #14
 - **Cambio de interfaz:** `load_document(path, use_cache=True)` y `load_expediente_dir(dir, use_cache=True)`: parámetro nuevo opcional. La API llama con `use_cache=False`
