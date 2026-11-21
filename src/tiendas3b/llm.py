@@ -7,6 +7,7 @@ agente use su ruta heurística. Así el sistema nunca se cae por el LLM.
 
 import json
 import logging
+import os
 import re
 import urllib.request
 from typing import TypeVar
@@ -59,6 +60,11 @@ def get_chat_model(settings: Settings | None = None) -> BaseChatModel | None:
         return None
     logger.warning("LLM_PROVIDER desconocido: %r. Se usa modo heurístico.", settings.llm_provider)
     return None
+
+
+def llm_parallel() -> int:
+    """Documentos que se mandan al LLM a la vez. Ollama atiende varios según OLLAMA_NUM_PARALLEL."""
+    return max(1, int(os.getenv("LLM_PARALLEL") or "2"))
 
 
 def describe_mode(settings: Settings | None = None) -> str:
