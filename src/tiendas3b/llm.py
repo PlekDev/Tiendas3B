@@ -9,6 +9,7 @@ import json
 import logging
 import os
 import re
+import time
 import urllib.request
 from typing import TypeVar
 
@@ -99,7 +100,17 @@ def invoke_json(model: BaseChatModel, system: str, user: str, schema: type[T]) -
     messages: list[BaseMessage] = [SystemMessage(content=system), HumanMessage(content=user)]
     for attempt in (1, 2):
         try:
+            t0 = time.perf_counter()
             response = model.invoke(messages)
+            meta = response.response_metadata
+            logger.info(
+                "LLM intento %d: %.1fs entrada=%s salida=%s fin=%s",
+                attempt,
+                time.perf_counter() - t0,
+                meta.get("prompt_eval_count"),
+                meta.get("eval_count"),
+                meta.get("done_reason"),
+            )
             return schema.model_validate(_parse_json_object(str(response.content)))
         except (json.JSONDecodeError, ValidationError) as exc:
             logger.warning("LLM intento %d: respuesta inválida (%s).", attempt, type(exc).__name__)
