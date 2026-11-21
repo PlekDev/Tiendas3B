@@ -27,7 +27,10 @@ def expediente_completo_docs() -> list[LoadedDocument]:
             pages=[
                 LoadedPage(
                     page_number=1,
-                    text="Boleta predial. Cuenta predial 12345. Contribuyente: Comercializadora Norte S.A.",
+                    text=(
+                        "Boleta predial. Cuenta predial 12345. "
+                        "Contribuyente: Comercializadora Norte S.A."
+                    ),
                 )
             ],
         ),
