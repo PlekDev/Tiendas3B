@@ -128,10 +128,10 @@ Sigue la guía [docs/GUIA_DASHBOARD.md](docs/GUIA_DASHBOARD.md): pantallas, de d
 | # | Prioridad | Tarea | Hecha cuando | Mientras tanto |
 |---|---|---|---|---|
 | V1 | P0 | Ambiente de las 5 laptops con [docs/AMBIENTE.md](docs/AMBIENTE.md): Python 3.11, `make setup`, `tesseract-ocr-spa`, Node para Diego y conexión al modelo de Andrés | `make check` en verde en todas | — |
-| V2 | P0 | Con los documentos reales **en local**: cuántas páginas son escaneo (`LoadedPage.source == "ocr"`) y qué tan bueno sale el OCR | Números en `estado/victor.md` | — |
-| V3 | P0 | Correr el clasificador sobre los PDFs reales y ajustar `_KEYWORDS` | ≥ 95 % de acierto, o lista de los que fallan | — |
+| V2 | P0 | Con los documentos reales **en local**: cuántas páginas son escaneo y qué tan bueno sale el OCR. Usar `tiendas3b diagnostico data/raw` (el resumen solo trae conteos) | Números en `estado/victor.md` | — |
+| V3 | P0 | Correr el clasificador sobre los PDFs reales y ajustar `_KEYWORDS`. `tiendas3b diagnostico` mide el acierto si los PDFs están en carpetas por tipo | ≥ 95 % de acierto, o lista de los que fallan | — |
 | V4 | P0 | Guion del pitch v1 (`pitch/guion_v1.md`) | Leído en voz alta en 3:00 | Cifras en corchetes hasta tener N4 |
-| V5 | P1 | **Armar expedientes**: los ZIP vienen por tipo de documento, no por inmueble. Comando `tiendas3b agrupar` que junte por clave catastral o dirección, o por la convención de nombres que diga el comité | Carpetas `data/expedientes/<ID>/` con sus documentos | Los expedientes ficticios |
+| V5 | P1 | **Armar expedientes**: los ZIP vienen por tipo de documento, no por inmueble. `tiendas3b agrupar data/raw --simular` propone los expedientes (une por clave catastral, cuenta, folio o misma dirección y número) y sin `--simular` los copia a `data/expedientes/`. Si el comité da una convención, esa manda | Carpetas `data/expedientes/<ID>/` revisadas a mano | Los expedientes ficticios |
 | V6 | P1 | **Logs estructurados** (`logs.py`): una línea JSON por evento en `logs/tiendas3b.jsonl` con `expediente_id`, `request_id`, agente, ms y resultado; consola legible; nivel con `LOG_LEVEL`. Agregar `logs/` al `.gitignore` | Cada análisis deja su rastro completo por agente | — |
 | V7 | P1 | **Bitácora de auditoría y confidencialidad**: un registro por dictamen (fecha, expediente, veredicto, confianza, modelo, huella de los cartuchos de reglas, duración) y `GET /api/v1/bitacora` para el dashboard. Filtro con prueba que impida escribir texto de documentos o nombres de propietarios en los logs | Se puede reconstruir qué se dictaminó, cuándo y con qué reglas | — |
 | V8 | P1 | Video de respaldo (con Diego) y 3 ensayos con la demo real | Video guardado en 2 laptops | — |
