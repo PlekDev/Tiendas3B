@@ -166,11 +166,22 @@ def write_demo_pdfs(out_dir: Path) -> list[Path]:
         folder = out_dir / case.expediente_id
         folder.mkdir(parents=True, exist_ok=True)
         for name, pages in case.documents.items():
-            with pymupdf.open() as pdf:  # type: ignore[no-untyped-call]
-                for text in pages:
-                    page = pdf.new_page()
-                    box = pymupdf.Rect(56, 56, 556, 786)  # type: ignore[no-untyped-call]
-                    page.insert_textbox(box, text, fontsize=11)
-                pdf.save(folder / name)
+            write_demo_pdf(folder / name, pages)
         folders.append(folder)
     return folders
+
+
+def write_demo_pdf(path: Path, pages: list[str]) -> Path:
+    """Un documento ficticio como PDF con capa de texto (una página por elemento)."""
+    with pymupdf.open() as pdf:  # type: ignore[no-untyped-call]
+        for text in pages:
+            page = pdf.new_page()
+            box = pymupdf.Rect(56, 56, 556, 786)  # type: ignore[no-untyped-call]
+            page.insert_textbox(box, text, fontsize=11)
+        pdf.save(path)
+    return path
+
+
+def find_demo_case(expediente_id: str) -> DemoCase | None:
+    """El caso de ejemplo con ese id (DEMO-CUMPLE, …), si existe."""
+    return next((c for c in DEMO_CASES.values() if c.expediente_id == expediente_id), None)

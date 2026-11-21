@@ -30,18 +30,19 @@ from fastapi import (
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, TypeAdapter, ValidationError
 
 from tiendas3b import __version__
 from tiendas3b.agents.orchestrator import analyze_expediente, graph_mermaid
 from tiendas3b.api.jobs import JobQueue, JobStatusResponse
 from tiendas3b.config import get_settings
-from tiendas3b.demo import DEMO_CASES, demo_documents
+from tiendas3b.demo import DEMO_CASES, demo_documents, find_demo_case, write_demo_pdf
 from tiendas3b.ingestion.pdf_loader import SUPPORTED_SUFFIXES, load_document
 from tiendas3b.llm import describe_mode, is_reachable
 from tiendas3b.logs import log_context, read_bitacora, record_dictamen, setup_logging
 from tiendas3b.models.schemas import ExpedienteReport
 from tiendas3b.rules.engine import load_cartuchos
+from tiendas3b.visor import MarkIn, VisorResponse, build_view
 
 logger = logging.getLogger("tiendas3b.api")
 
@@ -279,3 +280,42 @@ async def obtener_trabajo_endpoint(job_id: str) -> JobStatusResponse:
     if job is None:
         raise HTTPException(status_code=404, detail=f"Trabajo no encontrado o expirado: {job_id}")
     return job
+
+
+def _parse_marks(marcas: str) -> list[MarkIn]:
+    try:
+        return TypeAdapter(list[MarkIn]).validate_json(marcas or "[]")
+    except ValidationError as exc:
+        detail = f"marcas inválidas: {exc.errors()[:1]}"
+        raise HTTPException(status_code=422, detail=detail) from exc
+
+
+@app.post("/api/v1/visor", response_model=VisorResponse, tags=["visor"])
+async def visor_endpoint(
+    file: Annotated[UploadFile, File(description="Un PDF o imagen del expediente.")],
+    marcas: Annotated[str, Form(description="JSON: [{id, texto, contexto, pagina}]")] = "[]",
+) -> VisorResponse:
+    """Páginas del documento como imagen y dónde está cada dato (capa de texto u OCR).
+
+    El archivo se procesa en una carpeta temporal y se borra al terminar.
+    """
+    marks = _parse_marks(marcas)
+    with tempfile.TemporaryDirectory(prefix="tiendas3b-visor-") as tmp:
+        (path,) = await _save_uploads_to_dir([file], Path(tmp))
+        return await run_in_threadpool(build_view, path, marks)
+
+
+@app.post("/api/v1/visor/ejemplo", response_model=VisorResponse, tags=["visor", "demo"])
+async def visor_ejemplo_endpoint(
+    expediente_id: Annotated[str, Form()],
+    documento: Annotated[str, Form()],
+    marcas: Annotated[str, Form()] = "[]",
+) -> VisorResponse:
+    """Lo mismo que /visor, pero con los PDFs ficticios de los casos de ejemplo."""
+    case = find_demo_case(expediente_id)
+    if case is None or documento not in case.documents:
+        raise HTTPException(status_code=404, detail=f"No hay ejemplo {expediente_id}/{documento}.")
+    marks = _parse_marks(marcas)
+    with tempfile.TemporaryDirectory(prefix="tiendas3b-visor-") as tmp:
+        path = write_demo_pdf(Path(tmp) / Path(documento).name, case.documents[documento])
+        return await run_in_threadpool(build_view, path, marks)
