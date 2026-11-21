@@ -42,8 +42,7 @@ def get_chat_model(settings: Settings | None = None) -> BaseChatModel | None:
                 temperature=settings.llm_temperature,
                 base_url=settings.ollama_base_url,
                 format="json",
-                num_ctx=settings.llm_num_ctx,  # Ollama usa 2048 por defecto: no cabe un documento
-                num_predict=500,  
+                num_ctx=settings.llm_num_ctx,  # Ollama usa 2048 por defecto: no cabe un documento 
                 client_kwargs={"timeout": settings.llm_timeout_s},
             )
         if settings.llm_provider == "openai":
