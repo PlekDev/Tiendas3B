@@ -23,7 +23,7 @@ Este archivo dice **qué ya existe**, **quién hace qué**, **qué interfaz entr
 
 ## 1. Qué ya existe: el bosquejo
 
-Hay un bosquejo que corre de punta a punta. Ya está en `main` (PR #1); falta llevarlo a `dev` (tarea A1). Toma ideas de TrustNode: ingesta con PyMuPDF, el LLM con JSON estricto y un reintento, reglas en cartuchos JSON y la API con FastAPI. Es un **punto de partida**: cada quien lo mejora en su parte.
+Hay un bosquejo que corre de punta a punta en la rama `feature/victor-base-trustnode` (PR hacia `dev`). Toma ideas de TrustNode: ingesta con PyMuPDF, el LLM con JSON estricto y un reintento, reglas en cartuchos JSON y la API con FastAPI. Es un **punto de partida**: cada quien lo mejora en su parte.
 
 ### Arranque en 3 comandos
 
@@ -81,7 +81,7 @@ Cada tarea dice cuándo está hecha y de qué depende. Si depende de alguien, la
 
 | # | Prioridad | Tarea | Hecha cuando | Mientras tanto |
 |---|---|---|---|---|
-| A1 | P0 | Fusionar `main` en `dev`: el bosquejo entró a `main` por el PR #1 y `dev` tiene tus pruebas nuevas (`conftest.py`, `test_real_expedientes.py`), que usan las mismas firmas. Revisar los **cambios aditivos** a `schemas.py`: `confidence`, `method`, `severity`, `trace`, `reasons`, `processing_ms`, `llm_mode` | `main` y `dev` iguales, con el CI en verde | — |
+| A1 | P0 | Revisar y fusionar el PR del bosquejo a `dev`. Incluye **cambios aditivos** a `schemas.py`: `confidence`, `method`, `severity`, `trace`, `reasons`, `processing_ms`, `llm_mode` | `dev` con el CI en verde | — |
 | A2 | P0 | Ollama en la PC "cerebro". Comparar `llama3.1:8b` contra `qwen2.5:14b` con `tiendas3b evaluar` | `tiendas3b estado` dice "LLM responde: sí" y ya hay un tiempo medido por expediente | El modo heurístico (`LLM_PROVIDER=none`) |
 | A3 | P0 | Decidir con Diego el idioma del contrato (hoy en inglés: `recommendation`, `document_analyses`). Se decide una vez y no se cambia | Anotado en `estado/aaron.md` | — |
 | A4 | P1 | **Cola de trabajos**: `POST /api/v1/trabajos` → id; `GET /api/v1/trabajos/{id}` → estado, posición y resultado. `ThreadPoolExecutor` con `MAX_WORKERS` (2) y resultados en memoria con caducidad | 3 navegadores suben expedientes a la vez y los tres terminan | `POST /api/v1/analizar` (síncrono) |
