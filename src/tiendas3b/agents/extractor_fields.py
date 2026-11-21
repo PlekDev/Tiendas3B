@@ -68,7 +68,7 @@ FIELD_SPECS: dict[DocumentType, dict[str, FieldSpec]] = {
         ),
         "direccion": FieldSpec(
             "Dirección o ubicación del predio.",
-            ("ubicacion del predio", "domicilio del predio", "domicilio", "ubicacion"),
+            ("ubicacion del predio", "domicilio del predio", "domicilio", "ubicacion", "ubicación"),
             critical=True,
         ),
         "cuenta_predial": FieldSpec(
