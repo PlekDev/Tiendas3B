@@ -1,6 +1,7 @@
-# Pitch de 3 minutos · guion v1
+# Pitch de 3 minutos · guion v2
 
-> Borrador. Los números entre corchetes se llenan con datos reales de la corrida de `evaluacion/` y de la medición de tiempos. **No inventar cifras.**
+> Los números salen de mediciones reales del equipo (21 nov). Junto a cada uno dice de dónde viene.
+> Lo que sigue entre corchetes **todavía no se mide: no inventar cifras.**
 
 **Tiempo objetivo:** 3:00 · **Responsable:** Victor · **Ensayos:** 0 de 3
 
@@ -11,7 +12,8 @@
 > Tiendas 3B abrió 603 tiendas netas en los últimos 12 meses, y solo en el tercer trimestre abrió 4 CEDIS. Cada apertura lleva un expediente legal de inmueble, y hoy cada documento se revisa a mano.
 
 - Escrituras, predial, alineamiento y número oficial, uso de suelo: cuatro documentos por inmueble, cada uno con su guía.
-- Revisar uno toma [X] minutos de una persona. Dato del equipo de 3B: [tiempo manual que nos den].
+- Y no son PDFs limpios: **el 86 % de las páginas que nos dieron son escaneos.** *(diagnóstico sobre los 63 documentos oficiales)*
+- Revisar un expediente toma [M] minutos de una persona. *(dato que debe darnos 3B)*
 
 **Cierre del bloque:** "Cada expediente que revisamos a mano es un local que no evaluamos a tiempo."
 
@@ -19,14 +21,14 @@
 
 ## 2. La solución · 0:25–0:50
 
-> Cinco agentes coordinados en LangGraph: clasifican, extraen, validan, cruzan y dictaminan.
+> Cinco agentes coordinados en LangGraph: clasifican, extraen, validan, cruzan y dictaminan. Un supervisor reintenta cuando algo sale incompleto.
 
 - **Clasificador:** identifica cada documento y marca lo desconocido.
-- **Extractores:** sacan los campos con página y cita textual.
-- **Validador normativo y cruces:** Python calcula las reglas y las comparaciones. El LLM no decide.
+- **Extractores:** sacan los campos con página y cita textual, y **el sistema verifica que esa cita exista en el documento**.
+- **Validador y cruces:** Python calcula las reglas y las comparaciones. El LLM no decide.
 - **Dictaminador:** emite *Cumple*, *Requiere revisión* o *No cumple*, con razones.
 
-**Mostrar:** diagrama del grafo (la traza de agentes de la demo).
+**Mostrar:** diagrama del grafo (pantalla "Cómo se decidió" del dashboard).
 
 **Frase clave:** "El LLM lee. Python juzga. Y cada conclusión tiene una cita."
 
@@ -34,26 +36,28 @@
 
 ## 3. Demo en vivo · 0:50–2:10
 
-Dos expedientes cargados antes de la presentación, para no depender del tiempo de carga en vivo.
+Dos expedientes cargados antes de empezar, para no depender del tiempo de carga en vivo. Por defecto, los casos de prueba del sistema (datos ficticios).
 
 | Tiempo | Acción | Qué decir |
 |---|---|---|
-| 0:50 | Cargar el expediente A (Cumple o Requiere revisión) | "Ingresamos un expediente completo. El sistema arranca." |
-| 1:05 | Mostrar la traza de agentes corriendo | "Cada agente deja registro de lo que hizo y cuánto tardó." |
-| 1:20 | Veredicto y confianza | "Este expediente [resultado]. La confianza es [X]." |
-| 1:35 | Hacer clic en un hallazgo | "Aquí está la superficie: 280 m² en la escritura, 250 m² en el predial." |
-| 1:50 | Abrir la cita en el documento original | "Esta es la página y el texto exacto. Nadie tiene que buscarlo." |
-| 2:00 | Cargar el expediente B (No cumple) y mostrar el motivo | "Aquí el sistema detiene el proceso y explica por qué." |
+| 0:50 | Bandeja → abrir el expediente "revisión" | "Ingresamos un expediente completo: cuatro documentos." |
+| 1:05 | Mostrar la traza de agentes | "Cada agente deja registro de lo que hizo y cuánto tardó." |
+| 1:20 | Veredicto y confianza | "Requiere revisión, con confianza de [X] %." |
+| 1:35 | Clic en el hallazgo → comparación entre documentos | "La escritura dice 960 m², el predial 850: una diferencia de 11.5 %." |
+| 1:50 | **Ver en el documento** | "Esta es la página y el texto exacto. Nadie tiene que buscarlo." |
+| 2:00 | Abrir el expediente "no cumple" | "Aquí el propietario no coincide y el uso de suelo es habitacional: el sistema lo detiene y explica por qué." |
 
-**Plan B:** si la demo falla, reproducir el video grabado (ver sección 6).
+**Plan B:** si la demo falla, reproducir el video grabado (V8).
 
 ---
 
 ## 4. Resultados · 2:10–2:40
 
-- **Precisión:** [Y]% de aciertos contra los [N] expedientes de ejemplo.
-- **Tiempo:** [S] segundos por expediente, contra [M] minutos de revisión manual.
-- **Seguridad:** lo que tiene confianza alta sale como *Cumple*; lo dudoso va a *Requiere revisión*, nunca a *Cumple*.
+- **Clasificación: 63 de 63 documentos oficiales.** *(diagnóstico con OCR en español)*
+- **Lectura:** aun con 86 % de escaneos, extraemos **el 83 % de los datos** y **el 98 % trae su cita verificada** en el texto. *(LLM local llama3.1:8b sobre los 63 documentos)*
+- **Dictamen:** [Y] de [N] expedientes reales coinciden con la referencia. *(pendiente: etiquetas de Andrés, N1)*. En los casos de prueba: 4 de 4 y **cero aprobados por error**.
+- **Tiempo:** alrededor de **25 s por expediente** en los casos de prueba, con el modelo en una laptop con GPU de 8 GB. Un expediente real escaneado: [S] la primera vez. *(estimado por documento: ~20 s de OCR + ~17 s de LLM; medir uno completo)*. Contra [M] minutos a mano.
+- **Seguridad:** lo dudoso va a *Requiere revisión*, nunca a *Cumple*.
 
 **Frase clave:** "Preferimos mandar a revisión a un expediente bueno que aprobar uno malo."
 
@@ -61,18 +65,31 @@ Dos expedientes cargados antes de la presentación, para no depender del tiempo 
 
 ## 5. Cómo se usa en 3B · 2:40–3:00
 
-- Sale un JSON auditable por expediente, con evidencia de cada hallazgo.
-- Los datos no salen de la infraestructura de 3B. Es por diseño, igual que en TrustNode.
-- El equipo legal decide; el sistema prioriza.
+- **Una PC con el modelo y los auditores entran desde el navegador.** Cola de trabajos para que varios revisen a la vez. *(A4)*
+- **Los datos no salen de 3B:** el modelo corre en su propia red, y lo que se sube no se queda guardado en el servidor.
+- **Todo queda registrado:** cada dictamen guarda fecha, modelo y la versión de las reglas que se usó. *(bitácora)*
+- El equipo legal agrega reglas editando un archivo, sin programar.
 
-**Cierre (frase final):** "No reemplazamos al equipo legal. Le damos más expedientes revisados en menos tiempo y los que no cumplen salen primero."
+**Cierre (frase final):** "No reemplazamos al equipo legal. Le damos más expedientes revisados en menos tiempo, y los que no cumplen salen primero."
 
 ---
 
 ## Pendientes antes del ensayo
 
-- [ ] Llenar cada [corchete] con datos reales (no antes).
-- [ ] Confirmar con el comité las cifras de 3B que usamos (603 tiendas netas, 4 CEDIS en 3T26).
-- [ ] Decidir qué expediente es el A y cuál el B, según la corrida real.
-- [ ] Cronometrar: meta 3:00, tolerancia ±10 s por bloque.
-- [ ] Ensayo 1, 2 y 3 con la demo real. Anotar qué bloque se pasó.
+- [ ] **[M]** Tiempo de revisión manual por expediente: pedirlo al comité de 3B.
+- [ ] **[Y]/[N]** Precisión en expedientes reales: cuando Andrés tenga las etiquetas (N1) y `agrupar` arme los expedientes.
+- [ ] **[S]** Medir un expediente real completo con LLM (primera vez y con caché).
+- [ ] **[X]** Confianza del caso que se muestre en la demo.
+- [ ] Confirmar con el comité las cifras de 3B (603 tiendas netas, 4 CEDIS en 3T26).
+- [ ] Decidir si la demo usa los casos de prueba o un expediente real.
+- [ ] Cronometrar: meta 3:00, tolerancia ±10 s por bloque. Ensayar 3 veces con la demo real.
+
+## De dónde sale cada número
+
+| Número | Fuente | Fecha |
+|---|---|---|
+| 86 % de páginas escaneadas | `tiendas3b diagnostico data/raw` (63 docs, 250 págs) | 21 nov |
+| 63/63 clasificación | `diagnostico` después del ajuste de títulos (PR #14) | 21 nov |
+| 83 % de datos, 98 % con cita | Extracción con `llama3.1:8b` en la PC de Andrés, 63 docs | 21 nov |
+| 25 s por expediente, 4/4, 0 aprobados por error | Casos de prueba con LLM (Victor: 25.5 s; Andrés: 25.0 s) | 21 nov |
+| ~20 s de OCR y ~17 s de LLM por documento | `diagnostico` y la medición con LLM | 21 nov |
