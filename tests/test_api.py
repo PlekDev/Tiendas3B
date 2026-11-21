@@ -3,6 +3,7 @@
 import time
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 from tiendas3b.api.jobs import JobQueue
@@ -10,6 +11,11 @@ from tiendas3b.api.main import app
 from tiendas3b.demo import write_demo_pdfs
 
 client = TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def _logs_en_tmp(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LOG_DIR", str(tmp_path / "logs"))
 
 
 def test_status() -> None:
@@ -44,6 +50,18 @@ def test_analyze_uploaded_pdfs(tmp_path: Path) -> None:
 def test_rejects_unsupported_files() -> None:
     response = client.post("/api/v1/analizar", files=[("files", ("a.docx", b"x", "text/plain"))])
     assert response.status_code == 415
+
+
+def test_bitacora_records_uploaded_analysis(tmp_path: Path) -> None:
+    folder = next(f for f in write_demo_pdfs(tmp_path) if f.name == "DEMO-NO-CUMPLE")
+    files = [
+        ("files", (p.name, p.read_bytes(), "application/pdf")) for p in sorted(folder.iterdir())
+    ]
+    client.post("/api/v1/analizar", files=files, data={"expediente_id": "B-1", "usar_llm": "false"})
+    entries = client.get("/api/v1/bitacora").json()
+    assert entries[0]["expediente_id"] == "B-1"
+    assert entries[0]["recommendation"] == "No cumple"
+    assert entries[0]["origin"] == "api"
 
 
 def test_job_queue_three_concurrent_submissions(tmp_path: Path) -> None:

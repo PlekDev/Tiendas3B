@@ -8,8 +8,10 @@ ningún documento queda guardado en el servidor.
 import logging
 import shutil
 import tempfile
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile, status
 from fastapi.concurrency import run_in_threadpool
@@ -23,6 +25,7 @@ from tiendas3b.api.jobs import JobQueue, JobStatusResponse
 from tiendas3b.demo import DEMO_CASES, demo_documents
 from tiendas3b.ingestion.pdf_loader import SUPPORTED_SUFFIXES, load_document
 from tiendas3b.llm import describe_mode, is_reachable
+from tiendas3b.logs import log_context, read_bitacora, record_dictamen, setup_logging
 from tiendas3b.models.schemas import ExpedienteReport
 from tiendas3b.rules.engine import load_cartuchos
 
@@ -33,10 +36,19 @@ MAX_FILES = 40
 
 job_queue = JobQueue()
 
+
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    setup_logging()
+    logger.info("API lista", extra={"event": "inicio"})
+    yield
+
+
 app = FastAPI(
     title="Tiendas 3B · Análisis de expedientes",
     version=__version__,
     description="Sistema multiagente (LangChain + LangGraph) para dictaminar expedientes.",
+    lifespan=lifespan,
 )
 app.add_middleware(  # Permisivo para la hackatón. Restringir orígenes en producción.
     CORSMiddleware,
@@ -128,6 +140,14 @@ async def ejemplo_endpoint(caso: Annotated[str, Query()] = "revision") -> Expedi
     )
 
 
+@app.get("/api/v1/bitacora", tags=["sistema"])
+async def bitacora_endpoint(
+    limite: Annotated[int, Query(ge=1, le=500)] = 50,
+) -> list[dict[str, Any]]:
+    """Últimos dictámenes (sin datos personales) para la bandeja y para auditoría."""
+    return await run_in_threadpool(read_bitacora, limite)
+
+
 @app.get("/api/v1/grafo", tags=["sistema"])
 async def grafo_endpoint() -> dict[str, str]:
     return {"mermaid": await run_in_threadpool(graph_mermaid)}
@@ -163,13 +183,31 @@ async def analizar_endpoint(
     usar_llm: Annotated[bool, Form()] = True,
 ) -> ExpedienteReport:
     """Recibe los documentos de UN expediente y devuelve el dictamen completo."""
-    with tempfile.TemporaryDirectory(prefix="tiendas3b-") as tmp:
+    with (
+        log_context(expediente_id) as request_id,
+        tempfile.TemporaryDirectory(prefix="tiendas3b-") as tmp,
+    ):
         paths = await _save_uploads_to_dir(files, Path(tmp))
         documents = [await run_in_threadpool(load_document, p) for p in paths]
-        logger.info("Analizando %s (%d documentos)…", expediente_id, len(documents))
-        return await run_in_threadpool(
+        logger.info(
+            "Analizando %d documentos",
+            len(documents),
+            extra={"event": "analisis", "count": len(documents)},
+        )
+        report = await run_in_threadpool(
             analyze_expediente, expediente_id, documents, None, None, usar_llm
         )
+        await run_in_threadpool(record_dictamen, report, "api", request_id)
+        logger.info(
+            "Dictamen %s",
+            report.recommendation.value,
+            extra={
+                "event": "dictamen",
+                "status": report.recommendation.value,
+                "ms": report.processing_ms,
+            },
+        )
+        return report
 
 
 @app.post(

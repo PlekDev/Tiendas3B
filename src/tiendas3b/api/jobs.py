@@ -23,6 +23,7 @@ from pydantic import BaseModel, Field
 from tiendas3b.agents.orchestrator import analyze_expediente
 from tiendas3b.config import get_settings
 from tiendas3b.ingestion.pdf_loader import load_document
+from tiendas3b.logs import log_context, record_dictamen
 from tiendas3b.models.schemas import ExpedienteReport
 
 logger = logging.getLogger("tiendas3b.api.jobs")
@@ -136,20 +137,22 @@ class JobQueue:
                 self._queue_order.remove(job_id)
 
         try:
-            documents = [load_document(path) for path in record.file_paths]
-            logger.info(
-                "Trabajo %s: analizando %s (%d documentos)…",
-                job_id,
-                record.expediente_id,
-                len(documents),
-            )
-            report = analyze_expediente(
-                record.expediente_id,
-                documents,
-                None,
-                None,
-                record.usar_llm,
-            )
+            with log_context(record.expediente_id) as request_id:
+                documents = [load_document(path) for path in record.file_paths]
+                logger.info(
+                    "Trabajo %s: analizando %s (%d documentos)…",
+                    job_id,
+                    record.expediente_id,
+                    len(documents),
+                )
+                report = analyze_expediente(
+                    record.expediente_id,
+                    documents,
+                    None,
+                    None,
+                    record.usar_llm,
+                )
+                record_dictamen(report, "cola", request_id)
             with self._lock:
                 record.result = report
                 record.status = "completed"
