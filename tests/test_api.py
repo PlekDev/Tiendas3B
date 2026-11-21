@@ -138,3 +138,18 @@ def test_job_queue_not_found_and_ttl_expiration(tmp_path: Path) -> None:
     assert not tmp_job_dir.exists(), "El directorio temporal debe borrarse al terminar el trabajo."
     time.sleep(1.1)
     assert short_queue.get(submitted.id) is None
+
+
+def test_api_key_authentication(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Criterio de aceptación A6: sin la llave configurada en API_KEY, la API responde 401."""
+    monkeypatch.setenv("API_KEY", "secreto-tiendas3b")
+
+    no_key_resp = client.get("/api/v1/status")
+    assert no_key_resp.status_code == 401
+
+    wrong_key_resp = client.get("/api/v1/status", headers={"X-API-Key": "incorrecta"})
+    assert wrong_key_resp.status_code == 401
+
+    ok_resp = client.get("/api/v1/status", headers={"X-API-Key": "secreto-tiendas3b"})
+    assert ok_resp.status_code == 200
+    assert ok_resp.json()["api"] == "ok"

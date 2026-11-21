@@ -5,7 +5,9 @@ Los archivos subidos se procesan en una carpeta temporal y se borran al terminar
 ningún documento queda guardado en el servidor.
 """
 
+import hmac
 import logging
+import os
 import shutil
 import tempfile
 from collections.abc import AsyncIterator
@@ -13,7 +15,18 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated, Any
 
-from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile, status
+from fastapi import (
+    Depends,
+    FastAPI,
+    File,
+    Form,
+    Header,
+    HTTPException,
+    Query,
+    Request,
+    UploadFile,
+    status,
+)
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -22,6 +35,7 @@ from pydantic import BaseModel
 from tiendas3b import __version__
 from tiendas3b.agents.orchestrator import analyze_expediente, graph_mermaid
 from tiendas3b.api.jobs import JobQueue, JobStatusResponse
+from tiendas3b.config import get_settings
 from tiendas3b.demo import DEMO_CASES, demo_documents
 from tiendas3b.ingestion.pdf_loader import SUPPORTED_SUFFIXES, load_document
 from tiendas3b.llm import describe_mode, is_reachable
@@ -37,6 +51,20 @@ MAX_FILES = 40
 job_queue = JobQueue()
 
 
+def verify_api_key(
+    x_api_key: Annotated[str | None, Header(alias="X-API-Key")] = None,
+) -> None:
+    """Valida el header X-API-Key cuando la variable de entorno API_KEY está definida."""
+    expected = os.getenv("API_KEY", "").strip() or get_settings().api_key
+    if not expected:
+        return
+    if not x_api_key or not hmac.compare_digest(x_api_key, expected):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="API key inválida o faltante (header X-API-Key).",
+        )
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     setup_logging()
@@ -49,10 +77,11 @@ app = FastAPI(
     version=__version__,
     description="Sistema multiagente (LangChain + LangGraph) para dictaminar expedientes.",
     lifespan=lifespan,
+    dependencies=[Depends(verify_api_key)],
 )
-app.add_middleware(  # Permisivo para la hackatón. Restringir orígenes en producción.
+app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=list(get_settings().cors_origins),
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
