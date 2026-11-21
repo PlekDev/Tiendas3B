@@ -1,8 +1,11 @@
 """Esquemas Pydantic para trazabilidad, extracción y dictamen de expedientes."""
 
 from enum import StrEnum
+from typing import Literal
 
 from pydantic import BaseModel, Field
+
+Severity = Literal["info", "warning", "critical"]
 
 
 class DocumentType(StrEnum):
@@ -37,6 +40,13 @@ class ExtractedField(BaseModel):
     name: str
     value: str | None = None
     evidence: Evidence | None = None
+    confidence: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description="0 = sin sustento; baja si la cita no aparece literal en el documento.",
+    )
+    method: str = Field(default="", description="llm | heuristica | manual")
 
 
 class RuleEvaluation(BaseModel):
@@ -47,6 +57,10 @@ class RuleEvaluation(BaseModel):
     passed: bool
     details: str
     evidence: list[Evidence] = Field(default_factory=list)
+    severity: Severity = Field(
+        default="warning",
+        description="Peso si falla: critical → No cumple, warning → Requiere revisión.",
+    )
 
 
 class DocumentAnalysis(BaseModel):
@@ -57,6 +71,8 @@ class DocumentAnalysis(BaseModel):
     extracted_fields: list[ExtractedField] = Field(default_factory=list)
     rule_evaluations: list[RuleEvaluation] = Field(default_factory=list)
     missing_fields: list[str] = Field(default_factory=list)
+    classification_confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+    classification_method: str = Field(default="", description="llm | heuristica")
 
 
 class CrossValidationIssue(BaseModel):
@@ -70,6 +86,14 @@ class CrossValidationIssue(BaseModel):
     evidence: list[Evidence] = Field(default_factory=list)
 
 
+class AgentStep(BaseModel):
+    """Registro de un paso del grafo: qué agente actuó, cuánto tardó y qué concluyó."""
+
+    agent: str
+    ms: int = Field(ge=0)
+    detail: str = ""
+
+
 class ExpedienteReport(BaseModel):
     """Dictamen completo del expediente para presentación al equipo legal."""
 
@@ -81,3 +105,7 @@ class ExpedienteReport(BaseModel):
     confidence: float = Field(ge=0.0, le=1.0, default=0.0)
     recommendation: Recommendation
     explanation: str
+    reasons: list[str] = Field(default_factory=list)
+    trace: list[AgentStep] = Field(default_factory=list)
+    processing_ms: int = Field(default=0, ge=0)
+    llm_mode: str = Field(default="", description="Modelo usado o 'heuristico' si no hubo LLM.")
