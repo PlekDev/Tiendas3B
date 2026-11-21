@@ -105,5 +105,6 @@ def invoke_json(model: BaseChatModel, system: str, user: str, schema: type[T]) -
             logger.warning("LLM intento %d: respuesta inválida (%s).", attempt, type(exc).__name__)
             messages = [SystemMessage(content=system), HumanMessage(content=user + _RETRY_SUFFIX)]
         except Exception as exc:  # noqa: BLE001 - red, timeout o modelo no descargado
-            logger.warning("LLM intento %d: error al invocar (%s).", attempt, exc)
+            logger.warning("LLM error al invocar (%s); se usa ruta heurística.", exc)
+            return None
     return None
