@@ -4,11 +4,12 @@ Mismo patrón que TrustNode: prompt que exige JSON estricto, temperatura 0,
 validación con Pydantic, un reintento y, si falla, devolver None para que el
 agente use su ruta heurística. Así el sistema nunca se cae por el LLM.
 """
-import time
+
 import json
 import logging
 import os
 import re
+import time
 import urllib.request
 from typing import TypeVar
 
@@ -104,8 +105,11 @@ def invoke_json(model: BaseChatModel, system: str, user: str, schema: type[T]) -
             meta = response.response_metadata
             logger.info(
                 "LLM intento %d: %.1fs entrada=%s salida=%s fin=%s",
-                attempt, time.perf_counter() - t0,
-                meta.get("prompt_eval_count"), meta.get("eval_count"), meta.get("done_reason"),
+                attempt,
+                time.perf_counter() - t0,
+                meta.get("prompt_eval_count"),
+                meta.get("eval_count"),
+                meta.get("done_reason"),
             )
             return schema.model_validate(_parse_json_object(str(response.content)))
         except (json.JSONDecodeError, ValidationError) as exc:

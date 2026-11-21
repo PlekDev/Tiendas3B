@@ -40,7 +40,7 @@ CONF_LLM_UNVERIFIED = 0.3
 CONF_LABEL_SAME_LINE = 0.75
 CONF_LABEL_NEXT_LINE = 0.65
 CONF_DISCREPANCY = 0.55  # heurística y LLM dicen cosas distintas → dato en duda
-FAST_HEURISTIC_MIN = CONF_LABEL_SAME_LINE  # con esta confianza no se le pregunta al LLM
+FAST_HEURISTIC_MIN = 0.80  # con esta confianza no se le pregunta al LLM
 
 SYSTEM_PROMPT = """Eres un analista legal que revisa expedientes de inmuebles en México.
 Extrae SOLO información escrita en el documento. No supongas ni completes datos.
@@ -425,9 +425,11 @@ def _merge(
 ) -> ExtractedField | None:
     if llm_f is None or heu_f is None:
         return llm_f or heu_f
+    if llm_f.value is None or heu_f.value is None:
+        return llm_f if llm_f.value is not None else heu_f
     if _same(name, llm_f.value, heu_f.value):  # dos rutas independientes coinciden
         return llm_f.model_copy(
-            update={"confidence": min(0.97, llm_f.confidence + 0.07), "method": "llm+heuristica"}
+            update={"confidence": min(0.97, llm_f.confidence + 0.07), "method": "llm"}
         )
     best = max((llm_f, heu_f), key=lambda f: f.confidence)  # discrepancia → dato en duda
     return best.model_copy(update={"confidence": min(best.confidence, CONF_DISCREPANCY)})
