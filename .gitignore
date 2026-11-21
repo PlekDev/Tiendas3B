@@ -52,3 +52,9 @@ data/raw/*
 data/expedientes/*
 !data/raw/.gitkeep
 !data/expedientes/.gitkeep
+
+# Interfaz (frontend/)
+node_modules/
+
+# Salidas locales del CLI
+reportes/

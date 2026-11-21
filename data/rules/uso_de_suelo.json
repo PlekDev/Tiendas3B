@@ -1,0 +1,30 @@
+{
+  "tipo_documento": "uso_de_suelo",
+  "nombre": "Uso de Suelo",
+  "reglas": [
+    {"id": "USO-01", "tipo": "campo_presente", "campo": "direccion", "severidad": "warning",
+     "descripcion": "Indica la dirección o identificación del inmueble."},
+    {"id": "USO-02", "tipo": "campo_presente", "campo": "uso_autorizado", "severidad": "warning",
+     "descripcion": "Indica el uso de suelo autorizado."},
+    {"id": "USO-03", "tipo": "campo_presente", "campo": "compatibilidad_comercial", "severidad": "warning",
+     "descripcion": "Indica si el uso es compatible con el uso comercial requerido."},
+    {"id": "USO-04", "tipo": "alerta_si_presente", "campo": "restricciones", "severidad": "info",
+     "parametros": {"ignorar": ["ninguna", "ninguno", "sin restricciones", "no aplica", "n a"]},
+     "descripcion": "Señala restricciones o condicionantes para que el equipo legal las lea."},
+    {"id": "USO-05", "tipo": "campo_presente", "campo": "superficie_aplicable", "severidad": "info",
+     "descripcion": "Indica la superficie a la que aplica el uso de suelo."},
+    {"id": "USO-06", "tipo": "campo_presente", "campo": "fecha_emision_vigencia", "severidad": "warning",
+     "descripcion": "Indica la fecha de emisión y, si aplica, la vigencia."},
+    {"id": "USO-07", "tipo": "campo_presente", "campo": "autoridad_emisora", "severidad": "info",
+     "descripcion": "Indica la autoridad que lo emite."},
+    {"id": "USO-80", "tipo": "contiene_alguno", "campo": "uso_autorizado", "severidad": "warning",
+     "parametros": {"valores": ["comercial", "comercio", "servicios", "mixto"]},
+     "descripcion": "El uso autorizado incluye comercio o servicios (lo que necesita una tienda o CEDIS)."},
+    {"id": "USO-81", "tipo": "no_contiene", "campo": "compatibilidad_comercial", "severidad": "critical",
+     "parametros": {"valores": ["no compatible", "incompatible", "prohibido", "no permitido"]},
+     "descripcion": "El documento no declara el uso comercial como incompatible o prohibido."},
+    {"id": "USO-90", "tipo": "fecha_vigente", "campo": "fecha_emision_vigencia", "severidad": "warning",
+     "activa": false, "parametros": {"vigencia_dias": 365},
+     "descripcion": "El uso de suelo sigue vigente. PENDIENTE: confirmar la vigencia en la guía oficial."}
+  ]
+}

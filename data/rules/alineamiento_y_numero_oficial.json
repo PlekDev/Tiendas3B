@@ -1,0 +1,21 @@
+{
+  "tipo_documento": "alineamiento_y_numero_oficial",
+  "nombre": "Alineamiento y Número Oficial",
+  "reglas": [
+    {"id": "ALI-01", "tipo": "campo_presente", "campo": "direccion_oficial", "severidad": "warning",
+     "descripcion": "Indica la dirección oficial del inmueble."},
+    {"id": "ALI-02", "tipo": "campo_presente", "campo": "numero_oficial", "severidad": "warning",
+     "descripcion": "Indica el número oficial asignado."},
+    {"id": "ALI-03", "tipo": "campo_presente", "campo": "identificacion_predio", "severidad": "warning",
+     "descripcion": "Identifica el predio (clave catastral, cuenta o lote)."},
+    {"id": "ALI-04", "tipo": "campo_presente", "campo": "alineamiento", "severidad": "info",
+     "descripcion": "Indica el alineamiento determinado por la autoridad."},
+    {"id": "ALI-05", "tipo": "campo_presente", "campo": "fecha_emision_vigencia", "severidad": "warning",
+     "descripcion": "Indica la fecha de emisión y, si aplica, la vigencia."},
+    {"id": "ALI-06", "tipo": "campo_presente", "campo": "autoridad_emisora", "severidad": "info",
+     "descripcion": "Indica la autoridad que lo emite."},
+    {"id": "ALI-90", "tipo": "fecha_vigente", "campo": "fecha_emision_vigencia", "severidad": "warning",
+     "activa": false, "parametros": {"vigencia_dias": 365},
+     "descripcion": "El alineamiento sigue vigente. PENDIENTE: confirmar la vigencia en la guía oficial."}
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "tipo_documento": "predial",
+  "nombre": "Predial",
+  "reglas": [
+    {"id": "PRE-01", "tipo": "campo_presente", "campo": "propietario", "severidad": "warning",
+     "descripcion": "Identifica al propietario o contribuyente."},
+    {"id": "PRE-02", "tipo": "campo_presente", "campo": "direccion", "severidad": "warning",
+     "descripcion": "Indica la dirección del inmueble."},
+    {"id": "PRE-03", "tipo": "campo_presente", "campo": "cuenta_predial", "severidad": "warning",
+     "descripcion": "Indica la cuenta o clave predial."},
+    {"id": "PRE-04", "tipo": "campo_presente", "campo": "superficie_registrada", "severidad": "warning",
+     "descripcion": "Indica la superficie registrada."},
+    {"id": "PRE-05", "tipo": "numero_positivo", "campo": "superficie_registrada", "severidad": "warning",
+     "descripcion": "La superficie registrada es un número mayor a cero."},
+    {"id": "PRE-06", "tipo": "campo_presente", "campo": "referencia_cruzada", "severidad": "info",
+     "descripcion": "Incluye un dato que lo relaciona con los demás documentos."}
+  ]
+}

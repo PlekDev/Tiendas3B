@@ -1,0 +1,18 @@
+{
+  "tipo_documento": "escrituras",
+  "nombre": "Escrituras",
+  "reglas": [
+    {"id": "ESC-01", "tipo": "campo_presente", "campo": "propietario", "severidad": "warning",
+     "descripcion": "Identifica al propietario o titular del inmueble."},
+    {"id": "ESC-02", "tipo": "campo_presente", "campo": "direccion", "severidad": "warning",
+     "descripcion": "Indica la dirección o identificación del inmueble."},
+    {"id": "ESC-03", "tipo": "campo_presente", "campo": "superficie_terreno", "severidad": "warning",
+     "descripcion": "Indica la superficie del terreno."},
+    {"id": "ESC-04", "tipo": "numero_positivo", "campo": "superficie_terreno", "severidad": "warning",
+     "descripcion": "La superficie del terreno es un número mayor a cero."},
+    {"id": "ESC-05", "tipo": "campo_presente", "campo": "datos_inmueble", "severidad": "info",
+     "descripcion": "Incluye datos relevantes del inmueble (medidas, colindancias, lote, manzana)."},
+    {"id": "ESC-06", "tipo": "campo_presente", "campo": "referencia_cruzada", "severidad": "info",
+     "descripcion": "Incluye un dato que lo relaciona con el resto del expediente (folio, clave catastral)."}
+  ]
+}
