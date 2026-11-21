@@ -40,7 +40,7 @@ CONF_LLM_UNVERIFIED = 0.3
 CONF_LABEL_SAME_LINE = 0.75
 CONF_LABEL_NEXT_LINE = 0.65
 CONF_DISCREPANCY = 0.55  # heurística y LLM dicen cosas distintas → dato en duda
-FAST_HEURISTIC_MIN = 0.80  # con esta confianza no se le pregunta al LLM
+FAST_HEURISTIC_MIN = CONF_LABEL_NEXT_LINE  # con esta confianza no se le pregunta al LLM
 
 SYSTEM_PROMPT = """Eres un analista legal que revisa expedientes de inmuebles en México.
 Extrae SOLO información escrita en el documento. No supongas ni completes datos.
@@ -457,7 +457,7 @@ def extract_fields(
 
     llm_found: dict[str, ExtractedField] = {}
     if llm is not None and strategy in ("auto", "llm"):
-        fast = strategy == "auto" and document_type is not DocumentType.ESCRITURAS
+        fast = strategy == "auto"
         pending = {
             name: spec
             for name, spec in specs.items()

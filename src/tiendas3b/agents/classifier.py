@@ -159,7 +159,11 @@ def classify(
     all_pages=True lee todo el documento (lo usa el supervisor al reintentar).
     """
     heuristic = _heuristic(document, None if all_pages else CLASSIFY_PAGES)
-    if llm is None or heuristic.confidence >= 0.75:
+    if (
+        llm is None
+        or heuristic.confidence >= 0.75
+        or heuristic.document_type == DocumentType.DESCONOCIDO
+    ):
         return heuristic
     from_llm = _llm(document, llm)
     if from_llm is None:
