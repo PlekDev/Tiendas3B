@@ -15,6 +15,7 @@ from tiendas3b.models.schemas import (
     DocumentAnalysis,
     Evidence,
     ExtractedField,
+    Severity,
 )
 from tiendas3b.rules.criteria import CROSS_CHECKS, CrossCheck
 from tiendas3b.text import normalize, normalize_id, parse_number
@@ -48,8 +49,39 @@ def _text_similarity(a: str, b: str) -> float:
     return float(max(fuzz.token_sort_ratio(na, nb), fuzz.token_set_ratio(na, nb)))
 
 
-def _mismatch(check: CrossCheck, entries: list[_Entry]) -> str | None:
-    """Devuelve una explicación si los valores no cuadran; None si coinciden."""
+_AREA = re.compile(
+    r"(\d[\d,]*(?:\.\d+)?)\s*"
+    r"(m\s*2|m²|mts?\.?\s*2?|metros?\s+cuadrados?|ha\b|has\b|hectareas?|hectáreas?)",
+    re.IGNORECASE,
+)
+
+
+def _area_m2(text: str) -> float | None:
+    """Superficie en m². Prefiere el número junto a la unidad ('Lote 5, 250 m2' → 250)."""
+    match = _AREA.search(text)
+    if match is None:
+        return parse_number(text)
+    number = parse_number(match.group(1))
+    if number is None:
+        return None
+    unit = match.group(2).lower()
+    return number * 10_000 if unit.startswith("h") else number
+
+
+def _same_id(a: str, b: str) -> bool:
+    """Misma clave aunque una venga dentro de la otra ('Clave 098-123' vs '098123')."""
+    if a == b:
+        return True
+    shorter, longer = sorted((a, b), key=len)
+    return len(shorter) >= 6 and shorter in longer
+
+
+def _escalate(check: CrossCheck, critical: bool) -> Severity:
+    return "critical" if critical else check.severity
+
+
+def _mismatch(check: CrossCheck, entries: list[_Entry]) -> tuple[str, Severity] | None:
+    """Explicación y severidad si los valores no cuadran; None si coinciden."""
     if check.comparator == "texto":
         worst = min(
             (
@@ -61,13 +93,15 @@ def _mismatch(check: CrossCheck, entries: list[_Entry]) -> str | None:
         )
         score, a, b = worst
         if score < check.threshold:
+            critical = check.critical_threshold is not None and score < check.critical_threshold
             return (
                 f"{check.label}: '{a.value}' ({a.document}) vs '{b.value}' ({b.document}), "
-                f"similitud {score:.0f}%."
+                f"similitud {score:.0f}%.",
+                _escalate(check, critical),
             )
         return None
     if check.comparator == "superficie":
-        numbers = [(parse_number(e.value), e) for e in entries]
+        numbers = [(_area_m2(e.value), e) for e in entries]
         valid = [(n, e) for n, e in numbers if n is not None and n > 0]
         if len(valid) < 2:
             return None
@@ -77,16 +111,18 @@ def _mismatch(check: CrossCheck, entries: list[_Entry]) -> str | None:
         )
         diff = (high - low) / high * 100
         if diff > check.threshold:
+            critical = check.critical_threshold is not None and diff > check.critical_threshold
             return (
                 f"{check.label}: {high:g} m² ({e_high.document}) vs {low:g} m² ({e_low.document}), "
-                f"diferencia de {diff:.1f}% (tolerancia {check.threshold:g}%)."
+                f"diferencia de {diff:.1f}% (tolerancia {check.threshold:g}%).",
+                _escalate(check, critical),
             )
         return None
-    ids = {normalize_id(e.value) for e in entries}
-    if len(ids) > 1:
-        detail = ", ".join(f"'{e.value}' ({e.document})" for e in entries)
-        return f"{check.label} distinta entre documentos: {detail}."
-    return None
+    ids = [normalize_id(e.value) for e in entries]
+    if all(_same_id(a, b) for i, a in enumerate(ids) for b in ids[i + 1 :]):
+        return None
+    detail = ", ".join(f"'{e.value}' ({e.document})" for e in entries)
+    return f"{check.label} distinta entre documentos: {detail}.", check.severity
 
 
 def _numero_oficial_vs_direcciones(analyses: list[DocumentAnalysis]) -> CrossValidationIssue | None:
@@ -142,16 +178,17 @@ def cross_validate_detailed(
         if len(entries) < 2:
             summary.append(f"{check.label}: no evaluable ({len(entries)} documento con el dato)")
             continue
-        detail = _mismatch(check, entries)
-        if detail is None:
+        mismatch = _mismatch(check, entries)
+        if mismatch is None:
             summary.append(f"{check.label}: coincide en {len(entries)} documentos")
             continue
+        detail, severity = mismatch
         summary.append(f"{check.label}: discrepancia")
         issues.append(
             CrossValidationIssue(
                 field_name=check.key,
                 description=detail,
-                severity=check.severity,
+                severity=severity,
                 documents_involved=[e.document for e in entries],
                 values_found={e.document: e.value for e in entries},
                 evidence=[e.field.evidence for e in entries if e.field.evidence],

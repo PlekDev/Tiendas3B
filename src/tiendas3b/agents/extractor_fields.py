@@ -16,7 +16,10 @@ class FieldSpec:
     labels: tuple[str, ...]
     extra_labels: tuple[str, ...] = field(default=())  # se agregan al valor si aparecen
     critical: bool = False  # si falta, el supervisor reintenta la extracción
+    exclude: tuple[str, ...] = field(default=())  # la heurística salta líneas con estas palabras
 
+
+_CONSTRUCCION = ("construccion", "construida", "edificada")
 
 _FECHA = FieldSpec(
     description="Fecha de emisión del documento y, si la indica, fecha o plazo de vigencia.",
@@ -31,19 +34,22 @@ _AUTORIDAD = FieldSpec(
 FIELD_SPECS: dict[DocumentType, dict[str, FieldSpec]] = {
     DocumentType.ESCRITURAS: {
         "propietario": FieldSpec(
-            "Nombre del propietario, titular o adquirente del inmueble.",
-            ("propietario", "titular", "adquirente", "comprador", "a favor de"),
+            "Adquirente ACTUAL del inmueble (quien compra o a quien se adjudica), no el "
+            "vendedor. Si hay varios, sepáralos con ' ; '.",
+            ("adquirente", "propietario", "titular", "comprador", "a favor de"),
             critical=True,
         ),
         "direccion": FieldSpec(
-            "Dirección o ubicación del inmueble (calle, número, colonia, municipio).",
-            ("domicilio del inmueble", "ubicacion del inmueble", "domicilio", "ubicacion"),
+            "Dirección del INMUEBLE objeto de la escritura (calle, número, colonia, "
+            "municipio), no el domicilio de las partes.",
+            ("domicilio del inmueble", "ubicacion del inmueble"),
             critical=True,
         ),
         "superficie_terreno": FieldSpec(
-            "Superficie del terreno, con unidades (por ejemplo, '250.00 m2').",
+            "Superficie del TERRENO con unidades (por ejemplo, '250.00 m2'), no de construcción.",
             ("superficie del terreno", "superficie de terreno", "superficie total", "superficie"),
             critical=True,
+            exclude=_CONSTRUCCION,
         ),
         "datos_inmueble": FieldSpec(
             "Datos que describen el inmueble: lote, manzana, medidas o colindancias.",
@@ -71,9 +77,10 @@ FIELD_SPECS: dict[DocumentType, dict[str, FieldSpec]] = {
             critical=True,
         ),
         "superficie_registrada": FieldSpec(
-            "Superficie de terreno registrada, con unidades.",
+            "Superficie de TERRENO registrada, con unidades, no de construcción.",
             ("superficie de terreno", "superficie del terreno", "sup terreno", "superficie"),
             critical=True,
+            exclude=_CONSTRUCCION,
         ),
         "referencia_cruzada": FieldSpec(
             "Dato que lo liga a otros documentos: folio real o número de escritura.",
@@ -121,7 +128,7 @@ FIELD_SPECS: dict[DocumentType, dict[str, FieldSpec]] = {
             critical=True,
         ),
         "uso_autorizado": FieldSpec(
-            "Uso de suelo autorizado o permitido.",
+            "Uso de suelo autorizado o permitido, tal como lo dice el documento.",
             ("uso de suelo autorizado", "uso autorizado", "uso permitido", "uso de suelo", "giro"),
             critical=True,
         ),

@@ -5,6 +5,7 @@ Sirven para trabajar sin los documentos de 3B: pruebas, la interfaz, el endpoint
 """
 
 from dataclasses import dataclass, field
+from datetime import date
 from pathlib import Path
 
 import pymupdf
@@ -40,10 +41,16 @@ def _escritura(owner: str, address: str, area: str) -> list[str]:
     ]
 
 
+# Fechas relativas al año en curso: las reglas de vigencia usan la fecha real del día,
+# así que la demo no puede tener años fijos o dejaría de "cumplir" al cambiar el año.
+_YEAR = date.today().year
+
+
 def _predial(owner: str, address: str, area: str) -> list[str]:
     return [
         "TESORERÍA MUNICIPAL DE SAN ANDRÉS CHOLULA\n"
-        "RECIBO DE PAGO DEL IMPUESTO PREDIAL 2026\n"
+        f"RECIBO DE PAGO DEL IMPUESTO PREDIAL {_YEAR}\n"
+        f"Ejercicio fiscal: {_YEAR}\n"
         "Cuenta predial: 114-002-007-000\n"
         f"Nombre del contribuyente: {owner}\n"
         f"Ubicación del predio: {address}\n"
@@ -59,13 +66,13 @@ def _alineamiento(address: str, number: str) -> list[str]:
         "H. AYUNTAMIENTO DE SAN ANDRÉS CHOLULA\n"
         "DIRECCIÓN DE DESARROLLO URBANO\n"
         "CONSTANCIA DE ALINEAMIENTO Y NÚMERO OFICIAL\n"
-        "Folio: DU-ALI-2026-0451\n"
+        f"Folio: DU-ALI-{_YEAR}-0451\n"
         f"Dirección oficial: {address}\n"
         f"Número oficial asignado: {number}\n"
         "Clave catastral: 114-002-007-000\n"
         "Alineamiento: 5.00 m al paramento, sin afectación vial\n"
-        "Fecha de emisión: 10 de marzo de 2026\n"
-        "Vigencia: 10 de marzo de 2027\n"
+        f"Fecha de emisión: 2 de enero de {_YEAR}\n"
+        f"Vigencia: 2 de enero de {_YEAR + 1}\n"
         "Autoridad emisora: Dirección de Desarrollo Urbano, San Andrés Cholula"
     ]
 
@@ -79,7 +86,7 @@ def _uso_suelo(address: str, use: str, compat: str, restrictions: str, area: str
         f"Compatibilidad: {compat}\n"
         f"Restricciones: {restrictions}\n"
         f"Superficie aplicable: {area}\n"
-        "Fecha de expedición: 2 de abril de 2026\n"
+        f"Fecha de expedición: 5 de enero de {_YEAR}\n"
         "Autoridad emisora: Dirección de Desarrollo Urbano"
     ]
 
@@ -166,11 +173,22 @@ def write_demo_pdfs(out_dir: Path) -> list[Path]:
         folder = out_dir / case.expediente_id
         folder.mkdir(parents=True, exist_ok=True)
         for name, pages in case.documents.items():
-            with pymupdf.open() as pdf:  # type: ignore[no-untyped-call]
-                for text in pages:
-                    page = pdf.new_page()
-                    box = pymupdf.Rect(56, 56, 556, 786)  # type: ignore[no-untyped-call]
-                    page.insert_textbox(box, text, fontsize=11)
-                pdf.save(folder / name)
+            write_demo_pdf(folder / name, pages)
         folders.append(folder)
     return folders
+
+
+def write_demo_pdf(path: Path, pages: list[str]) -> Path:
+    """Un documento ficticio como PDF con capa de texto (una página por elemento)."""
+    with pymupdf.open() as pdf:  # type: ignore[no-untyped-call]
+        for text in pages:
+            page = pdf.new_page()
+            box = pymupdf.Rect(56, 56, 556, 786)  # type: ignore[no-untyped-call]
+            page.insert_textbox(box, text, fontsize=11)
+        pdf.save(path)
+    return path
+
+
+def find_demo_case(expediente_id: str) -> DemoCase | None:
+    """El caso de ejemplo con ese id (DEMO-CUMPLE, …), si existe."""
+    return next((c for c in DEMO_CASES.values() if c.expediente_id == expediente_id), None)

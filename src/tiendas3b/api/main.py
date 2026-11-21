@@ -5,38 +5,85 @@ Los archivos subidos se procesan en una carpeta temporal y se borran al terminar
 ningún documento queda guardado en el servidor.
 """
 
+import asyncio
+import hmac
 import logging
+import os
+import shutil
 import tempfile
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
-from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile, status
+from fastapi import (
+    Depends,
+    FastAPI,
+    File,
+    Form,
+    Header,
+    HTTPException,
+    Query,
+    Request,
+    UploadFile,
+    status,
+)
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, TypeAdapter, ValidationError
 
 from tiendas3b import __version__
 from tiendas3b.agents.orchestrator import analyze_expediente, graph_mermaid
-from tiendas3b.demo import DEMO_CASES, demo_documents
+from tiendas3b.api.jobs import JobQueue, JobStatusResponse
+from tiendas3b.config import get_settings
+from tiendas3b.demo import DEMO_CASES, demo_documents, find_demo_case, write_demo_pdf
 from tiendas3b.ingestion.pdf_loader import SUPPORTED_SUFFIXES, load_document
 from tiendas3b.llm import describe_mode, is_reachable
+from tiendas3b.logs import log_context, read_bitacora, record_dictamen, setup_logging
 from tiendas3b.models.schemas import ExpedienteReport
 from tiendas3b.rules.engine import load_cartuchos
+from tiendas3b.visor import MarkIn, VisorResponse, build_view
 
 logger = logging.getLogger("tiendas3b.api")
 
 MAX_FILE_MB = 60
 MAX_FILES = 40
 
+job_queue = JobQueue()
+
+
+def verify_api_key(
+    x_api_key: Annotated[str | None, Header(alias="X-API-Key")] = None,
+) -> None:
+    """Valida el header X-API-Key cuando la variable de entorno API_KEY está definida."""
+    expected = os.getenv("API_KEY", "").strip() or get_settings().api_key
+    if not expected:
+        return
+    if not x_api_key or not hmac.compare_digest(x_api_key, expected):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="API key inválida o faltante (header X-API-Key).",
+        )
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    setup_logging()
+    logger.info("API lista", extra={"event": "inicio"})
+    yield
+
+
 app = FastAPI(
     title="Tiendas 3B · Análisis de expedientes",
     version=__version__,
     description="Sistema multiagente (LangChain + LangGraph) para dictaminar expedientes.",
+    lifespan=lifespan,
+    dependencies=[Depends(verify_api_key)],
 )
-app.add_middleware(  # Permisivo para la hackatón. Restringir orígenes en producción.
+app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=list(get_settings().cors_origins),
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -124,9 +171,40 @@ async def ejemplo_endpoint(caso: Annotated[str, Query()] = "revision") -> Expedi
     )
 
 
+@app.get("/api/v1/bitacora", tags=["sistema"])
+async def bitacora_endpoint(
+    limite: Annotated[int, Query(ge=1, le=500)] = 50,
+) -> list[dict[str, Any]]:
+    """Últimos dictámenes (sin datos personales) para la bandeja y para auditoría."""
+    return await run_in_threadpool(read_bitacora, limite)
+
+
 @app.get("/api/v1/grafo", tags=["sistema"])
 async def grafo_endpoint() -> dict[str, str]:
     return {"mermaid": await run_in_threadpool(graph_mermaid)}
+
+
+async def _save_uploads_to_dir(files: list[UploadFile], target_dir: Path) -> list[Path]:
+    """Valida y guarda archivos subidos en `target_dir`."""
+    if not files:
+        raise HTTPException(status_code=400, detail="No se recibieron archivos.")
+    if len(files) > MAX_FILES:
+        raise HTTPException(status_code=400, detail=f"Máximo {MAX_FILES} archivos por expediente.")
+    paths: list[Path] = []
+    for upload in files:
+        name = Path(upload.filename or "documento.pdf").name
+        if Path(name).suffix.lower() not in SUPPORTED_SUFFIXES:
+            raise HTTPException(
+                status_code=415,
+                detail=f"{name}: tipo no soportado ({', '.join(SUPPORTED_SUFFIXES)}).",
+            )
+        payload = await upload.read()
+        if len(payload) > MAX_FILE_MB * 1024 * 1024:
+            raise HTTPException(status_code=413, detail=f"{name} excede {MAX_FILE_MB} MB.")
+        path = target_dir / name
+        path.write_bytes(payload)
+        paths.append(path)
+    return paths
 
 
 @app.post("/api/v1/analizar", response_model=ExpedienteReport, tags=["analisis"])
@@ -136,27 +214,111 @@ async def analizar_endpoint(
     usar_llm: Annotated[bool, Form()] = True,
 ) -> ExpedienteReport:
     """Recibe los documentos de UN expediente y devuelve el dictamen completo."""
-    if not files:
-        raise HTTPException(status_code=400, detail="No se recibieron archivos.")
-    if len(files) > MAX_FILES:
-        raise HTTPException(status_code=400, detail=f"Máximo {MAX_FILES} archivos por expediente.")
-    with tempfile.TemporaryDirectory(prefix="tiendas3b-") as tmp:
-        paths: list[Path] = []
-        for upload in files:
-            name = Path(upload.filename or "documento.pdf").name
-            if Path(name).suffix.lower() not in SUPPORTED_SUFFIXES:
-                raise HTTPException(
-                    status_code=415,
-                    detail=f"{name}: tipo no soportado ({', '.join(SUPPORTED_SUFFIXES)}).",
-                )
-            payload = await upload.read()
-            if len(payload) > MAX_FILE_MB * 1024 * 1024:
-                raise HTTPException(status_code=413, detail=f"{name} excede {MAX_FILE_MB} MB.")
-            path = Path(tmp) / name
-            path.write_bytes(payload)
-            paths.append(path)
-        documents = [await run_in_threadpool(load_document, p) for p in paths]
-        logger.info("Analizando %s (%d documentos)…", expediente_id, len(documents))
-        return await run_in_threadpool(
+    with (
+        log_context(expediente_id) as request_id,
+        tempfile.TemporaryDirectory(prefix="tiendas3b-") as tmp,
+    ):
+        paths = await _save_uploads_to_dir(files, Path(tmp))
+        # Sin caché: los documentos subidos no dejan rastro en el servidor.
+        documents = list(
+            await asyncio.gather(*(run_in_threadpool(load_document, p, False) for p in paths))
+        )
+        logger.info(
+            "Analizando %d documentos",
+            len(documents),
+            extra={"event": "analisis", "count": len(documents)},
+        )
+        report = await run_in_threadpool(
             analyze_expediente, expediente_id, documents, None, None, usar_llm
         )
+        await run_in_threadpool(record_dictamen, report, "api", request_id)
+        logger.info(
+            "Dictamen %s",
+            report.recommendation.value,
+            extra={
+                "event": "dictamen",
+                "status": report.recommendation.value,
+                "ms": report.processing_ms,
+            },
+        )
+        return report
+
+
+@app.post(
+    "/api/v1/trabajos",
+    response_model=JobStatusResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    tags=["trabajos"],
+)
+async def crear_trabajo_endpoint(
+    files: Annotated[list[UploadFile], File(description="PDFs o imágenes del expediente.")],
+    expediente_id: Annotated[str, Form()] = "EXP-SUBIDO",
+    usar_llm: Annotated[bool, Form()] = True,
+) -> JobStatusResponse:
+    """Encola el análisis de un expediente para no saturar el servidor LLM."""
+    tmp_dir = Path(tempfile.mkdtemp(prefix="tiendas3b-job-"))
+    try:
+        paths = await _save_uploads_to_dir(files, tmp_dir)
+    except Exception:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+        raise
+    return job_queue.submit(
+        expediente_id=expediente_id,
+        tmp_dir=tmp_dir,
+        file_paths=paths,
+        usar_llm=usar_llm,
+    )
+
+
+@app.get("/api/v1/trabajos", response_model=list[JobStatusResponse], tags=["trabajos"])
+async def listar_trabajos_endpoint() -> list[JobStatusResponse]:
+    """Lista los trabajos en cola, en proceso y completados recientemente."""
+    return job_queue.list_jobs()
+
+
+@app.get("/api/v1/trabajos/{job_id}", response_model=JobStatusResponse, tags=["trabajos"])
+async def obtener_trabajo_endpoint(job_id: str) -> JobStatusResponse:
+    """Devuelve el estado, posición en fila y resultado (cuando termina) de un trabajo."""
+    job = job_queue.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail=f"Trabajo no encontrado o expirado: {job_id}")
+    return job
+
+
+def _parse_marks(marcas: str) -> list[MarkIn]:
+    try:
+        return TypeAdapter(list[MarkIn]).validate_json(marcas or "[]")
+    except ValidationError as exc:
+        detail = f"marcas inválidas: {exc.errors()[:1]}"
+        raise HTTPException(status_code=422, detail=detail) from exc
+
+
+@app.post("/api/v1/visor", response_model=VisorResponse, tags=["visor"])
+async def visor_endpoint(
+    file: Annotated[UploadFile, File(description="Un PDF o imagen del expediente.")],
+    marcas: Annotated[str, Form(description="JSON: [{id, texto, contexto, pagina}]")] = "[]",
+) -> VisorResponse:
+    """Páginas del documento como imagen y dónde está cada dato (capa de texto u OCR).
+
+    El archivo se procesa en una carpeta temporal y se borra al terminar.
+    """
+    marks = _parse_marks(marcas)
+    with tempfile.TemporaryDirectory(prefix="tiendas3b-visor-") as tmp:
+        (path,) = await _save_uploads_to_dir([file], Path(tmp))
+        return await run_in_threadpool(build_view, path, marks)
+
+
+@app.post("/api/v1/visor/ejemplo", response_model=VisorResponse, tags=["visor", "demo"])
+async def visor_ejemplo_endpoint(
+    expediente_id: Annotated[str, Form()],
+    documento: Annotated[str, Form()],
+    marcas: Annotated[str, Form()] = "[]",
+) -> VisorResponse:
+    """Lo mismo que /visor, pero con los PDFs ficticios de los casos de ejemplo."""
+    case = find_demo_case(expediente_id)
+    if case is None or documento not in case.documents:
+        raise HTTPException(status_code=404, detail=f"No hay ejemplo {expediente_id}/{documento}.")
+    marks = _parse_marks(marcas)
+    with tempfile.TemporaryDirectory(prefix="tiendas3b-visor-") as tmp:
+        path = write_demo_pdf(Path(tmp) / Path(documento).name, case.documents[documento])
+        return await run_in_threadpool(build_view, path, marks)
