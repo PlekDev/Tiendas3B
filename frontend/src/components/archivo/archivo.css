@@ -709,6 +709,79 @@ button.kpi:hover .kpi__handle {
   color: var(--ink);
   font-size: 15px;
 }
+.asearch__x {
+  position: absolute;
+  right: 6px;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-3);
+  cursor: pointer;
+}
+.asearch__x:hover {
+  color: var(--ink);
+  background: var(--line);
+}
+.adate {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  margin-top: 14px;
+}
+.adate__l {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink-2);
+  font-weight: 600;
+  font-size: 14px;
+}
+.adate__chip,
+.adate__clear {
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1.5px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--ink);
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+}
+.adate__chip:hover,
+.adate__clear:hover {
+  border-color: var(--ink-2);
+}
+.adate__chip[aria-pressed="true"] {
+  background: var(--ink);
+  color: var(--surface);
+  border-color: var(--ink);
+}
+.adate__clear {
+  border-style: dashed;
+  color: var(--ink-2);
+}
+.adate__f {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink-2);
+  font-size: 14px;
+}
+.adate__f input {
+  height: 36px;
+  padding: 0 8px;
+  border-radius: 10px;
+  border: 1.5px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+}
 .ar-none {
   padding: 32px 0;
   text-align: center;
@@ -1013,6 +1086,10 @@ button.kpi:hover .kpi__handle {
   .asearch,
   .asearch input {
     width: 100%;
+  }
+  .adate__f,
+  .adate__f input {
+    flex: 1;
   }
 }
 

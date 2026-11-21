@@ -73,6 +73,18 @@
 .y2k-titlebar__name { flex: 1; color: var(--desk-ink); }
 .y2k-titlebar__clock { color: var(--desk-ink-2); }
 .y2k-desk__body { padding: clamp(18px, 2.4vw, 36px); padding-bottom: clamp(26px, 4vw, 56px); }
+.y2k-bulk { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin-bottom: 20px; }
+.y2k-bulk__btn {
+  position: relative; display: inline-flex; align-items: center; min-height: 48px; padding: 0 22px; cursor: pointer;
+  border-radius: 10px; border: 1.5px solid #d6232a; background: #d6232a; color: #fff;
+  font: 600 14px/1 "JetBrains Mono", ui-monospace, monospace; letter-spacing: 0.04em;
+  box-shadow: 0 6px 16px oklch(0.4 0.15 25 / 0.45); transition: transform 0.12s;
+}
+.y2k-bulk__btn:hover { transform: translateY(-2px); }
+.y2k-bulk__btn:focus-within { outline: 3px solid #fff; outline-offset: 2px; }
+.y2k-bulk__btn.is-off { opacity: 0.45; cursor: not-allowed; box-shadow: none; transform: none; }
+.y2k-bulk__tip { font-size: 13px; color: var(--desk-ink-2); }
+.y2k-bulk__sum { flex-basis: 100%; margin: 0; font-size: 13.5px; color: #8fe39a; }
 .y2k-desk__layout { display: flex; flex-direction: column; gap: 24px; }
 .y2k-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: clamp(16px, 2vw, 28px) clamp(14px, 1.6vw, 24px); }
 .y2k-desk__foot {

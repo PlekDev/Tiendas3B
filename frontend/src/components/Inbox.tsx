@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Plus, Search } from "lucide-react";
+import { CalendarDays, Plus, Search, X } from "lucide-react";
 import type { Entry } from "../types";
 import { CountUp } from "./Bits";
 import { seconds } from "../labels";
@@ -15,6 +15,23 @@ import {
   type VerdictKind,
 } from "./archivo/data";
 
+type Quick = "hoy" | "ayer" | "7d";
+const QUICK_LABEL: Record<Quick, string> = { hoy: "Hoy", ayer: "Ayer", "7d": "Últimos 7 días" };
+
+/** yyyy-mm-dd en hora local (lo que entrega <input type="date">). */
+function dayKey(ms: number): string {
+  const d = new Date(ms);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+function quickRange(q: Quick): [string, string] {
+  const day = 86_400_000;
+  const now = Date.now();
+  if (q === "hoy") return [dayKey(now), dayKey(now)];
+  if (q === "ayer") return [dayKey(now - day), dayKey(now - day)];
+  return [dayKey(now - 6 * day), dayKey(now)];
+}
+
 export function Inbox({
   entries,
   onOpen,
@@ -28,6 +45,8 @@ export function Inbox({
 }) {
   const [filter, setFilter] = useState<Filter>("todos");
   const [q, setQ] = useState("");
+  const [from, setFrom] = useState(""); // yyyy-mm-dd, vacío = sin límite
+  const [to, setTo] = useState("");
   const [selId, setSelId] = useState<string | null>(null);
 
   const carpetas = useMemo(() => entries.map(toCarpeta), [entries]);
@@ -47,9 +66,29 @@ export function Inbox({
       carpetas
         .filter((c) => filter === "todos" || c.kind === filter)
         .filter((c) => c.id.toLowerCase().includes(q.trim().toLowerCase()))
+        .filter((c) => {
+          const day = dayKey(c.createdAt); // yyyy-mm-dd compara bien como texto
+          return (!from || day >= from) && (!to || day <= to);
+        })
         .sort(sortCarpetas),
-    [carpetas, filter, q],
+    [carpetas, filter, q, from, to],
   );
+  const dateOn = !!(from || to);
+  const activeQuick = (Object.keys(QUICK_LABEL) as Quick[]).find((k) => {
+    const [f, t] = quickRange(k);
+    return f === from && t === to;
+  });
+  const pickQuick = (k: Quick) => {
+    const [f, t] = activeQuick === k ? ["", ""] : quickRange(k);
+    setFrom(f);
+    setTo(t);
+  };
+  const clearAll = () => {
+    setQ("");
+    setFrom("");
+    setTo("");
+    setFilter("todos");
+  };
 
   // Si lo seleccionado ya no está en la lista (filtro, búsqueda, quitado), se muestra la primera carpeta.
   const selected = rows.find((c) => c.id === selId) ?? rows[0] ?? null;
@@ -131,7 +170,42 @@ export function Inbox({
                   placeholder="Buscar por ID"
                   aria-label="Buscar por ID"
                 />
+                {q && (
+                  <button type="button" className="asearch__x" onClick={() => setQ("")} aria-label="Borrar búsqueda">
+                    <X size={16} aria-hidden />
+                  </button>
+                )}
               </label>
+            </div>
+
+            <div className="adate" role="group" aria-label="Filtrar por fecha de creación">
+              <span className="adate__l">
+                <CalendarDays size={17} aria-hidden /> Creado
+              </span>
+              {(Object.keys(QUICK_LABEL) as Quick[]).map((k) => (
+                <button
+                  key={k}
+                  type="button"
+                  className="adate__chip"
+                  aria-pressed={activeQuick === k}
+                  onClick={() => pickQuick(k)}
+                >
+                  {QUICK_LABEL[k]}
+                </button>
+              ))}
+              <label className="adate__f">
+                Desde
+                <input type="date" value={from} max={to || undefined} onChange={(e) => setFrom(e.target.value)} />
+              </label>
+              <label className="adate__f">
+                Hasta
+                <input type="date" value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)} />
+              </label>
+              {(dateOn || q || filter !== "todos") && (
+                <button type="button" className="adate__clear" onClick={clearAll}>
+                  Quitar filtros
+                </button>
+              )}
             </div>
 
             {rows.length ? (
@@ -149,9 +223,9 @@ export function Inbox({
               </div>
             ) : (
               <p className="ar-none" role="status">
-                {filter !== "todos" && !q
+                {filter !== "todos" && !q && !dateOn
                   ? `No hay carpetas en «${kindLabel(filter)}».`
-                  : "No hay expedientes con ese filtro o ID."}
+                  : "No hay expedientes con esa búsqueda, fecha o filtro."}
               </p>
             )}
           </>

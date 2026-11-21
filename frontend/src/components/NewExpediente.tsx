@@ -21,10 +21,10 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 /** Pista por nombre de archivo. El tipo real lo decide el Clasificador al analizar. */
 function guessType(name: string): DocType | null {
   const n = name.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
-  if (/escritura/.test(n)) return "escrituras";
-  if (/predial/.test(n)) return "predial";
-  if (/alineamiento|numero.?oficial|no.?oficial/.test(n)) return "alineamiento_y_numero_oficial";
-  if (/uso.?de.?suelo|uso.?suelo|\buso\b/.test(n)) return "uso_de_suelo";
+  if (/escritur|titulo.?de.?propiedad|compraventa/.test(n)) return "escrituras";
+  if (/predial|boleta.?pred/.test(n)) return "predial";
+  if (/alineamiento|alineamiant|alineacion|numero.?oficial|no\.?.?oficial/.test(n)) return "alineamiento_y_numero_oficial";
+  if (/uso.?de.?suelo|uso.?suelo|\buso\b|lic.{0,10}suelo/.test(n)) return "uso_de_suelo";
   return null;
 }
 
@@ -76,6 +76,8 @@ export function NewExpediente({
   const [replay, setReplay] = useState<"idle" | "playing" | "done">("idle");
   const [lastExample, setLastExample] = useState<string | null>(null);
   const grid = useRef<HTMLDivElement>(null);
+  const bulk = useRef<HTMLLabelElement>(null);
+  const [resumen, setResumen] = useState("");
   const alive = useRef(true);
 
   useEffect(() => {
@@ -149,6 +151,23 @@ export function NewExpediente({
   const distribute = (files: File[], from: { x: number; y: number }) => {
     const taken = new Set<Slot>(SLOTS.filter((s) => slots[s]));
     const fl: Flight[] = [];
+    {
+      const t = new Set(taken);
+      let ok = 0;
+      files.forEach((f) => {
+        const g = guessType(f.name);
+        if (g && g !== "desconocido" && !t.has(g as Slot)) {
+          t.add(g as Slot);
+          ok++;
+        }
+      });
+      const rest = files.length - ok;
+      setResumen(
+        rest
+          ? `Acomodé ${ok} de ${files.length} por nombre. ${rest === 1 ? "1 archivo fue" : `${rest} archivos fueron`} a Anexos y se clasifica${rest === 1 ? "" : "n"} por contenido al analizar.`
+          : `Listo: ${ok} ${ok === 1 ? "documento acomodado" : "documentos acomodados"} en su carpeta.`,
+      );
+    }
     files.forEach((f, i) => {
       const g = guessType(f.name);
       const slot = g && g !== "desconocido" && !taken.has(g as Slot) ? (g as Slot) : null;
@@ -174,15 +193,21 @@ export function NewExpediente({
     setFlights((p) => [...p, ...fl]);
   };
 
-  /** Archivos soltados o elegidos en una carpeta: el primero va ahí; el resto se reparte. */
+  /** Un archivo en una carpeta: va ahí (decisión de la persona). Varios: se acomodan todos solos. */
   const pickInto = (slot: Slot, files: File[]) => {
     if (!files.length) return;
-    place(slot, toItem(files[0]));
-    const rest = files.slice(1);
-    if (rest.length) {
-      const r = grid.current?.getBoundingClientRect();
-      distribute(rest, r ? { x: r.left + r.width / 2, y: r.top + 40 } : { x: 200, y: 200 });
-    }
+    if (files.length === 1) return place(slot, toItem(files[0]));
+    const r = grid.current?.getBoundingClientRect();
+    distribute(files, r ? { x: r.left + r.width / 2, y: r.top + 40 } : { x: 200, y: 200 });
+  };
+
+  /** Botón "Elegir los 4 documentos": una sola selección y cada archivo cae en su carpeta. */
+  const pickAll = (list: FileList | null) => {
+    const f = Array.from(list ?? []);
+    if (!f.length) return;
+    desbloquearSonido();
+    const r = bulk.current?.getBoundingClientRect();
+    distribute(f, r ? { x: r.left + r.width / 2, y: r.top + r.height / 2 } : { x: 200, y: 200 });
   };
 
   /* ---------- ejemplos: se llenan las carpetas una por una ---------- */
@@ -193,6 +218,7 @@ export function NewExpediente({
     setSlots({});
     setAnnex([]);
     setDoubts({});
+    setResumen("");
     setLastExample(c.caso);
     for (const name of c.documentos) {
       await sleep(320);
@@ -254,7 +280,7 @@ export function NewExpediente({
           <h1 className="nx-title">
             Cuatro carpetas. <em className="y2k-chrome-text">Un dictamen.</em>
           </h1>
-          <p className="nx-lede">Coloca cada documento en su carpeta. El Clasificador confirma el tipo al analizar.</p>
+          <p className="nx-lede">Elige los documentos de una vez y se acomodan solos. El Clasificador confirma el tipo al analizar.</p>
         </div>
         <label className="nx-id">
           <span>ID DEL EXPEDIENTE</span>
@@ -279,6 +305,31 @@ export function NewExpediente({
             onLocate={(e) => onOpenResult(e)}
           />
         )}
+        <div className="y2k-bulk">
+          <label className={`y2k-bulk__btn${locked ? " is-off" : ""}`} ref={bulk}>
+            <input
+              className="y2k-file"
+              type="file"
+              multiple
+              accept=".pdf,.jpg,.jpeg,.png,.tif,.tiff"
+              disabled={locked}
+              aria-label="Elegir los documentos del expediente"
+              onChange={(e) => {
+                pickAll(e.target.files);
+                e.target.value = "";
+              }}
+            />
+            [ + ] Elegir los 4 documentos
+          </label>
+          <span className="y2k-bulk__tip">
+            Selecciónalos juntos (Ctrl/⌘ + clic) o arrástralos aquí. Cada uno va solo a su carpeta.
+          </span>
+          {resumen && (
+            <p className="y2k-bulk__sum" role="status">
+              {resumen}
+            </p>
+          )}
+        </div>
         <div className="y2k-desk__layout">
           <div className="y2k-grid" ref={grid}>
             {SLOTS.map((s, i) => (
