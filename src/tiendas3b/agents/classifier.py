@@ -52,7 +52,6 @@ _KEYWORDS: dict[DocumentType, tuple[str, ...]] = {
         "valor catastral",
         "superficie terreno",
         "h ayuntamiento",
-        "municipio",
     ),
     DocumentType.ALINEAMIENTO: (
         "alineamiento",
@@ -60,7 +59,6 @@ _KEYWORDS: dict[DocumentType, tuple[str, ...]] = {
         "constancia de alineamiento",
         "constancia de numero oficial",
         "alineamiento y numero oficial",
-        "desarrollo urbano",
         "obras publicas",
         "restriccion de construccion",
         "frente a la calle",
