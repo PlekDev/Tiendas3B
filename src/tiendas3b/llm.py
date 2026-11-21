@@ -103,12 +103,19 @@ def _parse_json_object(text: str) -> object:
 
 
 def _emit_llm_trace(block: str) -> None:
-    """Imprime en terminal y guarda en logs/llm_calls.log el detalle de cada llamada LLM."""
-    trace_mode = os.getenv("LLM_TRACE", "1").strip().lower()
-    in_pytest = bool(os.getenv("PYTEST_CURRENT_TEST"))
+    """Traza de llamadas LLM (deshabilitada por defecto).
+
+    LLM_TRACE=0 (por defecto): no imprime ni escribe nada.
+    LLM_TRACE=1 | true: imprime en terminal y guarda en logs/llm_calls.log.
+    LLM_TRACE=file: solo guarda en logs/llm_calls.log sin imprimir en terminal.
+    """
+    trace_mode = os.getenv("LLM_TRACE", "0").strip().lower()
+    if trace_mode in ("", "0", "false", "no") or os.getenv("PYTEST_CURRENT_TEST"):
+        return
     with _TRACE_LOCK:
-        if trace_mode not in ("0", "false", "no") and (not in_pytest or trace_mode == "always"):
+        if trace_mode in ("1", "true", "yes", "console", "all"):
             print(block, file=sys.stderr, flush=True)
+        if trace_mode in ("1", "true", "yes", "file", "all"):
             log_dir = Path(os.getenv("LOG_DIR") or (PROJECT_ROOT / "logs"))
             try:
                 log_dir.mkdir(parents=True, exist_ok=True)
