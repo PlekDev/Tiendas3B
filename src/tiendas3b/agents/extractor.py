@@ -312,23 +312,19 @@ def extract_fields(
 ) -> tuple[list[ExtractedField], list[str]]:
     """Extrae campos clave del documento y reporta los faltantes.
 
-    strategy="auto": primero extrae por heurística y solo invoca al LLM para los campos faltantes.
+    strategy="auto": LLM si hay, y la heurística llena lo que falte.
     strategy="heuristica_amplia": también acepta el valor en el renglón siguiente a la etiqueta.
     """
     specs = FIELD_SPECS.get(document_type, {})
     found: dict[str, ExtractedField] = {}
+    if llm is not None and strategy in ("auto", "llm"):
+        found = _extract_llm(document, document_type, specs, llm)
     if strategy != "llm":
         wide = strategy == "heuristica_amplia"
-        found = _extract_heuristic(document, specs, wide)
-    if llm is not None and strategy in ("auto", "llm"):
-        pending_specs = (
-            specs if strategy == "llm" else {k: v for k, v in specs.items() if k not in found}
-        )
-        if pending_specs:
-            for name, value in _extract_llm(document, document_type, pending_specs, llm).items():
-                current = found.get(name)
-                if current is None or current.confidence < value.confidence:
-                    found[name] = value
+        for name, value in _extract_heuristic(document, specs, wide).items():
+            current = found.get(name)
+            if current is None or current.confidence < value.confidence:
+                found[name] = value
     required = REQUIRED_FIELDS_BY_TYPE.get(document_type, ())
     ordered = [found[name] for name in required if name in found]
     missing = [name for name in required if name not in found]

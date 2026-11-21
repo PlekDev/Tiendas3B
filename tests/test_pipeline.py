@@ -49,43 +49,19 @@ def test_pipeline_survives_a_broken_llm() -> None:
 
 
 def test_pipeline_uses_llm_extraction_when_valid() -> None:
-    from tiendas3b.ingestion.pdf_loader import LoadedDocument, LoadedPage
-
-    docs = demo_documents("cumple")
-    # Reemplazar la etiqueta 'Cuenta predial:' por prosa sin etiqueta para que entre el LLM
-    prose_docs = [
-        LoadedDocument(
-            filename=d.filename,
-            path=d.path,
-            pages=[
-                LoadedPage(
-                    page_number=p.page_number,
-                    text=p.text.replace(
-                        "Cuenta predial: 114-002-007-000",
-                        "Inscrito bajo el padrón municipal número 114-002-007-000 vigente",
-                    ),
-                    source=p.source,
-                )
-                for p in d.pages
-            ],
-        )
-        if d.filename == "predial.pdf"
-        else d
-        for d in docs
-    ]
     answer = json.dumps(
         {
             "campos": {
                 "cuenta_predial": {
                     "valor": "114-002-007-000",
                     "pagina": 1,
-                    "cita": "Inscrito bajo el padrón municipal número 114-002-007-000 vigente",
+                    "cita": "Cuenta predial: 114-002-007-000",
                 }
             }
         }
     )
     llm = FakeListChatModel(responses=[answer] * 10)
-    report = analyze_expediente("X", prose_docs, llm=llm)
+    report = analyze_expediente("X", demo_documents("cumple"), llm=llm)
     predial = next(a for a in report.document_analyses if a.document_name == "predial.pdf")
     cuenta = next(f for f in predial.extracted_fields if f.name == "cuenta_predial")
     assert cuenta.method == "llm"
