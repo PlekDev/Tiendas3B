@@ -68,3 +68,5 @@ logs/
 
 # Caché local de OCR (texto de documentos: nunca se sube)
 data/cache/
+
+evaluacion/resultado_real.json
