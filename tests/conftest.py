@@ -1,9 +1,11 @@
 """Fixtures compartidas para pruebas unitarias (datos sintéticos)."""
 
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
 
+from tiendas3b.config import get_settings
 from tiendas3b.ingestion.pdf_loader import LoadedDocument, LoadedPage
 
 
@@ -11,6 +13,15 @@ from tiendas3b.ingestion.pdf_loader import LoadedDocument, LoadedPage
 def _ocr_cache_en_tmp(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Las pruebas no escriben en data/cache del repo."""
     monkeypatch.setenv("OCR_CACHE_DIR", str(tmp_path / "ocr-cache"))
+
+
+@pytest.fixture(autouse=True)
+def _sin_llm(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    """Las pruebas no dependen del .env local ni de la red: sin LLM salvo que la prueba lo pase."""
+    monkeypatch.setenv("LLM_PROVIDER", "none")
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
 
 
 @pytest.fixture
