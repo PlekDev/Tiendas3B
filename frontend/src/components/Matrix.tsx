@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { motion } from "motion/react";
+import { Reveal } from "../anim";
 import { TONE_ICON } from "../labels";
 import { MATRIX_COLS, type MatrixCell } from "../model";
 
@@ -6,7 +8,7 @@ import { MATRIX_COLS, type MatrixCell } from "../model";
 export function Matrix({ rows }: { rows: { doc: string; cells: MatrixCell[] }[] }) {
   const [sel, setSel] = useState<{ key: string; text: string } | null>(null);
   return (
-    <section className="sec">
+    <Reveal className="sec">
       <div className="sec__head">
         <h2 className="h2">Documento × regla</h2>
         <span className="small muted">Cada celda es un tema revisado en un documento.</span>
@@ -29,8 +31,14 @@ export function Matrix({ rows }: { rows: { doc: string; cells: MatrixCell[] }[] 
                 const text = `${r.doc} × ${MATRIX_COLS[j].label}: ${c.detail}`;
                 const show = () => setSel({ key, text });
                 return (
-                  <button
+                  <motion.button
                     key={key}
+                    initial={{ opacity: 0, scale: 0.4 }}
+                    whileInView={{ opacity: 1, scale: 1 }}
+                    viewport={{ once: true }}
+                    transition={{ type: "spring", stiffness: 500, damping: 20, delay: (i * 7 + j) * 0.02 }}
+                    whileHover={{ scale: 1.12, zIndex: 1 }}
+                    whileTap={{ scale: 0.9 }}
                     className={`mcell t-${c.tone}${sel?.key === key ? " is-on" : ""}`}
                     aria-label={text}
                     title={text}
@@ -39,7 +47,7 @@ export function Matrix({ rows }: { rows: { doc: string; cells: MatrixCell[] }[] 
                     onClick={show}
                   >
                     {TONE_ICON[c.tone]}
-                  </button>
+                  </motion.button>
                 );
               })}
             </div>
@@ -49,6 +57,6 @@ export function Matrix({ rows }: { rows: { doc: string; cells: MatrixCell[] }[] 
           </div>
         </div>
       </div>
-    </section>
+    </Reveal>
   );
 }

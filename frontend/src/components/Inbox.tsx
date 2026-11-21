@@ -1,8 +1,10 @@
 import { useMemo, useState } from "react";
-import { motion } from "motion/react";
+import { AnimatePresence, LayoutGroup, motion } from "motion/react";
+import { CircleAlert, CircleCheck, CircleX, LoaderCircle, Plus, Search, Timer, type LucideIcon } from "lucide-react";
 import type { Entry, Verdict } from "../types";
 import { Chip, CountUp, Dot } from "./Bits";
 import { VERDICT_UI, seconds, type Tone } from "../labels";
+import { fadeUp, press, spring, stagger } from "../anim";
 
 type Filter = "todos" | "warn" | "bad" | "ok" | "proc";
 const RANK: Record<string, number> = { "No cumple": 1, "Requiere revisión": 2, Cumple: 3 };
@@ -61,12 +63,12 @@ export function Inbox({
     [entries, filter, q],
   );
 
-  const counters: { label: string; n?: number; text?: string; tone: Tone; icon?: string; f?: Filter }[] = [
-    { label: "Requiere revisión", n: count("Requiere revisión"), tone: "warn", f: "warn" },
-    { label: "No cumple", n: count("No cumple"), tone: "bad", f: "bad" },
-    { label: "Cumple", n: count("Cumple"), tone: "ok", f: "ok" },
-    { label: "En proceso", n: proc, tone: "info", icon: "…", f: "proc" },
-    { label: "Tiempo promedio", text: avg ? seconds(Math.round(avg)) : "—", tone: "na", icon: "·" },
+  const counters: { label: string; n?: number; text?: string; tone: Tone; Icon: LucideIcon; f?: Filter; spin?: boolean }[] = [
+    { label: "Requiere revisión", n: count("Requiere revisión"), tone: "warn", Icon: CircleAlert, f: "warn" },
+    { label: "No cumple", n: count("No cumple"), tone: "bad", Icon: CircleX, f: "bad" },
+    { label: "Cumple", n: count("Cumple"), tone: "ok", Icon: CircleCheck, f: "ok" },
+    { label: "En proceso", n: proc, tone: "info", Icon: LoaderCircle, f: "proc", spin: proc > 0 },
+    { label: "Tiempo promedio", text: avg ? seconds(Math.round(avg)) : "—", tone: "na", Icon: Timer },
   ];
   const pills: [Filter, string][] = [
     ["todos", "Todos"],
@@ -78,39 +80,64 @@ export function Inbox({
 
   return (
     <main className="page" data-screen-label="Bandeja">
-      <div className="page-head">
-        <div>
+      <motion.div className="page-head" variants={stagger(0.06)} initial="hidden" animate="show">
+        <motion.div variants={fadeUp}>
           <h1 className="h1">Expedientes</h1>
           <p className="muted" style={{ marginTop: 6 }}>
             Primero lo que necesita a una persona.
           </p>
-        </div>
-        <button className="btn btn--primary" onClick={onNew}>
-          <span style={{ fontSize: 18, lineHeight: 1 }}>+</span>Nuevo expediente
-        </button>
-      </div>
+        </motion.div>
+        <motion.button variants={fadeUp} className="btn btn--primary btn--cta" onClick={onNew} {...press}>
+          <Plus size={20} strokeWidth={2.6} aria-hidden />
+          Nuevo expediente
+        </motion.button>
+      </motion.div>
 
-      <div className="counters">
-        {counters.map((c) => (
-          <button
-            key={c.label}
-            className={`counter${c.f && filter === c.f ? " is-on" : ""}`}
-            disabled={!c.f}
-            aria-pressed={c.f ? filter === c.f : undefined}
-            onClick={() => c.f && setFilter(filter === c.f ? "todos" : c.f)}
-          >
-            <span className="counter__label">
-              <Dot tone={c.tone} icon={c.icon} />
-              {c.label}
-            </span>
-            <span className="counter__n">{c.text ?? <CountUp value={c.n ?? 0} />}</span>
-          </button>
-        ))}
-      </div>
+      <motion.div className="counters" variants={stagger(0.06, 0.08)} initial="hidden" animate="show">
+        {counters.map((c) => {
+          const on = !!c.f && filter === c.f;
+          return (
+            <motion.button
+              key={c.label}
+              variants={fadeUp}
+              className={`counter t-${c.tone}${on ? " is-on" : ""}${c.f ? "" : " counter--static"}`}
+              disabled={!c.f}
+              aria-pressed={c.f ? on : undefined}
+              onClick={() => c.f && setFilter(on ? "todos" : c.f)}
+              whileHover={c.f ? { y: -4, transition: spring } : undefined}
+              whileTap={c.f ? { scale: 0.96 } : undefined}
+            >
+              <span className="counter__label">
+                <motion.span
+                  className="counter__icon"
+                  animate={c.spin ? { rotate: 360 } : { rotate: 0 }}
+                  transition={c.spin ? { repeat: Infinity, duration: 1.2, ease: "linear" } : spring}
+                >
+                  <c.Icon size={22} strokeWidth={2.3} aria-hidden />
+                </motion.span>
+                {c.label}
+              </span>
+              <span className="counter__n">{c.text ?? <CountUp value={c.n ?? 0} />}</span>
+              {on && <motion.span className="counter__bar" layoutId="counter-bar" transition={spring} />}
+            </motion.button>
+          );
+        })}
+      </motion.div>
 
       {!entries.length ? (
-        <div className="empty">
-          <div className="h2" style={{ fontSize: 24 }}>
+        <motion.div className="empty" initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} transition={{ ...spring, delay: 0.2 }}>
+          <motion.div
+            className="empty__art"
+            aria-hidden
+            animate={{ y: [0, -8, 0] }}
+            transition={{ repeat: Infinity, duration: 3, ease: "easeInOut" }}
+          >
+            <span className="brand__mark brand__mark--xl">
+              <span>B</span>
+              <span>BB</span>
+            </span>
+          </motion.div>
+          <div className="h2" style={{ fontSize: 26 }}>
             Sube un expediente o prueba con un ejemplo
           </div>
           <p className="muted pretty">
@@ -118,36 +145,43 @@ export function Inbox({
             decimos si el inmueble sigue, con la prueba de cada dato.
           </p>
           <div className="chips" style={{ justifyContent: "center" }}>
-            <button className="btn btn--primary" onClick={onNew}>
+            <motion.button className="btn btn--primary btn--cta" onClick={onNew} {...press}>
               Subir expediente
-            </button>
-            <button className="btn" style={{ height: 42, padding: "0 18px", fontSize: 14 }} onClick={onExample}>
+            </motion.button>
+            <motion.button className="btn btn--cta btn--ghostcta" onClick={onExample} {...press}>
               Probar con un ejemplo
-            </button>
+            </motion.button>
           </div>
-        </div>
+        </motion.div>
       ) : (
-        <div className="sec" style={{ gap: 12 }}>
+        <motion.div className="sec" style={{ gap: 12 }} variants={fadeUp} initial="hidden" animate="show" transition={{ delay: 0.15 }}>
           <div className="toolbar">
-            <div className="pills" role="group" aria-label="Filtrar">
-              {pills.map(([k, label]) => (
-                <button
-                  key={k}
-                  className={`pill${filter === k ? " is-on" : ""}`}
-                  aria-pressed={filter === k}
-                  onClick={() => setFilter(k)}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-            <input
-              className="input input--search"
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Buscar por ID"
-              aria-label="Buscar por ID"
-            />
+            <LayoutGroup id="pills">
+              <div className="pills" role="group" aria-label="Filtrar">
+                {pills.map(([k, label]) => (
+                  <motion.button
+                    key={k}
+                    className={`pill${filter === k ? " is-on" : ""}`}
+                    aria-pressed={filter === k}
+                    onClick={() => setFilter(k)}
+                    whileTap={{ scale: 0.94 }}
+                  >
+                    {filter === k && <motion.span className="pill__bg" layoutId="pill-bg" transition={spring} />}
+                    <span className="pill__label">{label}</span>
+                  </motion.button>
+                ))}
+              </div>
+            </LayoutGroup>
+            <label className="search">
+              <Search size={18} aria-hidden />
+              <input
+                className="input input--search"
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Buscar por ID"
+                aria-label="Buscar por ID"
+              />
+            </label>
           </div>
 
           <div className="card inbox">
@@ -159,78 +193,85 @@ export function Inbox({
               <span>Bloqueantes</span>
               <span>Estado</span>
             </div>
-            {rows.map((e, i) => {
-              const r = e.report;
-              const conf = r ? Math.round(r.confidence * 100) : null;
-              const doubt = conf != null && conf < 60;
-              const b = blocking(e);
-              const st =
-                e.status === "procesando"
-                  ? { tone: "info" as Tone, icon: "…", label: "Procesando", note: "Analizando en el servidor" }
-                  : e.status === "error"
-                    ? { tone: "bad" as Tone, icon: "✕", label: "Error", note: e.error }
-                    : { tone: "na" as Tone, icon: "✓", label: "Listo", note: undefined };
-              return (
-                <motion.button
-                  key={e.id}
-                  className="inbox__row"
-                  onClick={() => onOpen(e)}
-                  initial={{ opacity: 0, y: 6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: Math.min(i, 8) * 0.03, duration: 0.2 }}
-                >
-                  <span className="mono inbox__id" style={{ fontSize: 13, fontWeight: 500 }}>
-                    {e.id}
-                  </span>
-                  <span className="muted">
-                    {new Date(e.createdAt).toLocaleDateString("es-MX", { day: "numeric", month: "short", year: "numeric" })}
-                  </span>
-                  <span className={r ? "" : "inbox__cell--empty"}>
-                    {r ? (
-                      <Chip tone={VERDICT_UI[r.recommendation].cls}>{r.recommendation}</Chip>
-                    ) : (
-                      <span className="faint">—</span>
-                    )}
-                  </span>
-                  <span className={`conf${conf == null ? " inbox__cell--empty" : ""}`}>
-                    {conf != null ? (
-                      <>
-                        <span className="inbox__label">Confianza</span>
-                        <span className={`bar${doubt ? " bar--doubt" : ""}`}>
-                          <span style={{ width: `${conf}%` }} />
-                        </span>
-                        <span className="num" style={{ fontWeight: 600 }}>
-                          {conf} %{doubt ? " ?" : ""}
-                        </span>
-                      </>
-                    ) : (
-                      <span className="faint">—</span>
-                    )}
-                  </span>
-                  <span
-                    className={`num${r ? "" : " inbox__cell--empty"}`}
-                    style={{ fontWeight: 600, color: b ? "var(--bad)" : "var(--ink-3)" }}
+            <AnimatePresence initial={true} mode="popLayout">
+              {rows.map((e, i) => {
+                const r = e.report;
+                const conf = r ? Math.round(r.confidence * 100) : null;
+                const doubt = conf != null && conf < 60;
+                const b = blocking(e);
+                const st =
+                  e.status === "procesando"
+                    ? { tone: "info" as Tone, icon: "…", label: "Procesando", note: "Analizando en el servidor" }
+                    : e.status === "error"
+                      ? { tone: "bad" as Tone, icon: "✕", label: "Error", note: e.error }
+                      : { tone: "na" as Tone, icon: "✓", label: "Listo", note: undefined };
+                return (
+                  <motion.button
+                    key={e.id}
+                    layout
+                    className={`inbox__row${r ? ` inbox__row--${VERDICT_UI[r.recommendation].cls}` : ""}`}
+                    onClick={() => onOpen(e)}
+                    initial={{ opacity: 0, x: -24 }}
+                    animate={{ opacity: 1, x: 0, transition: { ...spring, delay: Math.min(i, 10) * 0.04 } }}
+                    exit={{ opacity: 0, x: 24, transition: { duration: 0.15 } }}
+                    whileHover={{ x: 4 }}
+                    whileTap={{ scale: 0.99 }}
                   >
-                    <span className="inbox__label">Bloqueantes </span>
-                    {r ? b : "—"}
-                  </span>
-                  <span className={`state t-${st.tone}`}>
-                    <span className="state__main">
-                      <Dot tone={st.tone} icon={st.icon} ring />
-                      {st.label}
+                    <span className="mono inbox__id">{e.id}</span>
+                    <span className="muted inbox__date">
+                      {new Date(e.createdAt).toLocaleDateString("es-MX", { day: "numeric", month: "short", year: "numeric" })}
                     </span>
-                    {st.note && <span className="small faint">{st.note}</span>}
-                  </span>
-                </motion.button>
-              );
-            })}
+                    <span className={r ? "inbox__verdict" : "inbox__cell--empty"}>
+                      {r ? (
+                        <Chip tone={VERDICT_UI[r.recommendation].cls}>{r.recommendation}</Chip>
+                      ) : (
+                        <span className="faint">—</span>
+                      )}
+                    </span>
+                    <span className={`conf${conf == null ? " inbox__cell--empty" : ""}`}>
+                      {conf != null ? (
+                        <>
+                          <span className="inbox__label">Confianza</span>
+                          <span className={`bar${doubt ? " bar--doubt" : ""}`}>
+                            <motion.span
+                              initial={{ width: 0 }}
+                              animate={{ width: `${conf}%` }}
+                              transition={{ ...spring, delay: 0.2 + Math.min(i, 10) * 0.04 }}
+                            />
+                          </span>
+                          <span className="num" style={{ fontWeight: 600 }}>
+                            {conf} %{doubt ? " ?" : ""}
+                          </span>
+                        </>
+                      ) : (
+                        <span className="faint">—</span>
+                      )}
+                    </span>
+                    <span
+                      className={`num${r ? "" : " inbox__cell--empty"}`}
+                      style={{ fontWeight: 600, color: b ? "var(--bad)" : "var(--ink-3)" }}
+                    >
+                      <span className="inbox__label">Bloqueantes </span>
+                      {r ? b : "—"}
+                    </span>
+                    <span className={`state t-${st.tone}`}>
+                      <span className="state__main">
+                        <Dot tone={st.tone} icon={st.icon} ring />
+                        {st.label}
+                      </span>
+                      {st.note && <span className="small faint">{st.note}</span>}
+                    </span>
+                  </motion.button>
+                );
+              })}
+            </AnimatePresence>
             {!rows.length && (
-              <div className="muted" style={{ padding: 32, textAlign: "center" }}>
+              <motion.div className="muted" style={{ padding: 32, textAlign: "center" }} initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                 No hay expedientes con ese filtro o ID.
-              </div>
+              </motion.div>
             )}
           </div>
-        </div>
+        </motion.div>
       )}
     </main>
   );

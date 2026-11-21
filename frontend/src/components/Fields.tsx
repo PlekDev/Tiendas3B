@@ -1,14 +1,42 @@
 import { methodLabel } from "../labels";
+import { Reveal } from "../anim";
 import type { EvTarget, FieldRow } from "../model";
 
 export function Fields({ rows, onEvidence }: { rows: FieldRow[]; onEvidence: (t: EvTarget) => void }) {
   return (
-    <section className="sec">
+    <Reveal className="sec">
       <div className="sec__head">
         <h2 className="h2">Datos extraídos</h2>
         <span className="small muted">Los datos con menos de 60 % de seguridad se marcan como en duda.</span>
       </div>
-      <div className="card scroll">
+      <div className="mcards only-narrow-flex">
+        {rows.map((f) => {
+          const pct = Math.round(f.conf * 100);
+          return (
+            <button
+              key={f.key}
+              className={`mcard mcard--field${f.doubt ? " mcard--doubt" : ""}`}
+              disabled={!f.target}
+              onClick={() => f.target && onEvidence(f.target)}
+            >
+              <span className="mcard__head">
+                <b>{f.campo}</b>
+                <span className="num small" style={{ fontWeight: 600 }}>
+                  {pct} %{f.doubt ? " · en duda" : ""}
+                </span>
+              </span>
+              <span className="mcard__val">{f.valor ? (f.doubt ? `? ${f.valor}` : f.valor) : "No encontrado"}</span>
+              <span className="bar bar--full">
+                <span style={{ width: `${pct}%`, background: f.doubt ? "var(--warn)" : "var(--ink-3)" }} />
+              </span>
+              <span className="mono small faint">
+                {f.src} · {methodLabel(f.method)}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      <div className="card scroll only-wide-block">
         <table className="tbl tbl--fields">
           <thead>
             <tr>
@@ -69,6 +97,6 @@ export function Fields({ rows, onEvidence }: { rows: FieldRow[]; onEvidence: (t:
           </tbody>
         </table>
       </div>
-    </section>
+    </Reveal>
   );
 }

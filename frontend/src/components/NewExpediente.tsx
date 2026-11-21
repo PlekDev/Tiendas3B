@@ -4,6 +4,8 @@ import type { DemoCase, DocType } from "../types";
 import { DOC_LABEL, DOC_ORDER, type Tone } from "../labels";
 import { getCasos } from "../api";
 import { Chip } from "./Bits";
+import { FileText, Sparkles, UploadCloud } from "lucide-react";
+import { fadeUp, press, spring, stagger } from "../anim";
 
 const STEPS = ["Clasificador", "Extractores", "Validador", "Cruces", "Dictamen"];
 
@@ -79,7 +81,7 @@ export function NewExpediente({
   const finalId = id.trim() || `EXP-${new Date().toISOString().slice(0, 10)}`;
 
   return (
-    <main className="page page--narrow" data-screen-label="Nuevo expediente">
+    <main className="page new" data-screen-label="Nuevo expediente">
       <div>
         <button className="back" onClick={onCancel}>
           ← Bandeja
@@ -89,7 +91,8 @@ export function NewExpediente({
         </h1>
       </div>
 
-      <section className="panel-card">
+      <div className="new__grid">
+      <motion.section className="panel-card" variants={fadeUp} initial="hidden" animate="show">
         <label className="field">
           ID del expediente
           <input
@@ -101,8 +104,12 @@ export function NewExpediente({
           />
         </label>
 
-        <button
+        <motion.button
           className={`drop${drag ? " is-on" : ""}`}
+          animate={{ scale: drag ? 1.02 : 1 }}
+          whileHover={{ scale: 1.01 }}
+          whileTap={{ scale: 0.98 }}
+          transition={spring}
           onClick={() => input.current?.click()}
           onDragOver={(e) => {
             e.preventDefault();
@@ -115,9 +122,16 @@ export function NewExpediente({
             add(e.dataTransfer.files);
           }}
         >
+          <motion.span
+            className="drop__icon"
+            animate={drag ? { y: [0, -8, 0] } : { y: 0 }}
+            transition={drag ? { repeat: Infinity, duration: 0.8 } : spring}
+          >
+            <UploadCloud size={40} strokeWidth={1.8} aria-hidden />
+          </motion.span>
           <span style={{ fontWeight: 600 }}>Arrastra aquí los PDF o imágenes del expediente</span>
-          <span className="small muted">o haz clic para elegir archivos · PDF, JPG, PNG</span>
-        </button>
+          <span className="small muted">o toca para elegir archivos · PDF, JPG, PNG</span>
+        </motion.button>
         <input
           ref={input}
           type="file"
@@ -140,10 +154,12 @@ export function NewExpediente({
                     key={f.name}
                     className="file"
                     layout
-                    initial={{ opacity: 0, y: -4 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, height: 0, paddingTop: 0, paddingBottom: 0 }}
+                    initial={{ opacity: 0, y: -12, scale: 0.96 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, x: 40, transition: { duration: 0.18 } }}
+                    transition={spring}
                   >
+                    <FileText size={22} className="faint" aria-hidden style={{ flex: "none" }} />
                     <span className="file__name">
                       {f.name} <span className="faint" style={{ fontWeight: 400 }}>· {size(f.size)}</span>
                     </span>
@@ -243,14 +259,16 @@ export function NewExpediente({
           </div>
         </div>
 
-        <div className="chips" style={{ alignItems: "center", gap: 12 }}>
-          <button
-            className="btn btn--primary btn--lg"
+        <div className="new__actions">
+          <motion.button
+            className="btn btn--primary btn--lg btn--cta"
             disabled={busy || !files.length}
             onClick={() => onAnalyze(finalId, files, aiOn)}
+            {...press}
           >
+            <Sparkles size={20} aria-hidden />
             {busy ? "Analizando…" : "Analizar"}
-          </button>
+          </motion.button>
           <span className="small muted">
             {!files.length
               ? "Agrega al menos un archivo."
@@ -283,33 +301,49 @@ export function NewExpediente({
                   </span>
                 ))}
               </div>
+              <div className="progress">
+                <motion.div
+                  className="progress__fill"
+                  animate={{ width: `${((step + 1) / STEPS.length) * 92}%` }}
+                  transition={{ type: "spring", stiffness: 60, damping: 18 }}
+                />
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
-      </section>
+      </motion.section>
 
-      <section className="sec" style={{ gap: 12 }}>
+      <aside className="sec new__aside" style={{ gap: 12 }}>
         <h2 className="h2">O prueba con un ejemplo</h2>
-        <div className="examples">
+        <motion.div className="examples" variants={stagger(0.07, 0.15)} initial="hidden" animate={casos ? "show" : "hidden"}>
           {casos?.map((c) => {
             const [tone, label] = EXAMPLE_TONE[c.caso] ?? ["neutral", c.esperado];
             return (
-              <button key={c.caso} className="example" disabled={busy} onClick={() => onExample(c.caso)}>
+              <motion.button
+                key={c.caso}
+                variants={fadeUp}
+                className={`example t-${tone}`}
+                disabled={busy}
+                onClick={() => onExample(c.caso)}
+                whileHover={{ y: -4, transition: spring }}
+                whileTap={{ scale: 0.97 }}
+              >
                 <Chip tone={tone}>{label}</Chip>
                 <span className="mono" style={{ fontSize: 13, fontWeight: 500 }}>
                   {c.expediente_id}
                 </span>
                 <span className="small muted pretty">{c.descripcion}</span>
-              </button>
+              </motion.button>
             );
           })}
-        </div>
+        </motion.div>
         {casos && !casos.length && (
           <p className="small muted">
             No se pudo cargar la lista de ejemplos. ¿Está corriendo la API (make api)?
           </p>
         )}
-      </section>
+      </aside>
+      </div>
     </main>
   );
 }

@@ -1,16 +1,40 @@
 import { DOC_ORDER, DOC_SHORT } from "../labels";
+import { Reveal } from "../anim";
 import type { CompRow, EvTarget } from "../model";
 import { Chip } from "./Bits";
 
 /** Una fila por cruce (CROSS_CHECKS), una columna por documento. */
 export function Compare({ rows, onEvidence }: { rows: CompRow[]; onEvidence: (t: EvTarget) => void }) {
   return (
-    <section className="sec">
+    <Reveal className="sec">
       <div className="sec__head">
         <h2 className="h2">Comparación entre documentos</h2>
         <span className="small muted">Toca cualquier valor para ver dónde aparece en el documento.</span>
       </div>
-      <div className="card scroll">
+      <div className="mcards only-narrow-flex">
+        {rows.map((r) => (
+          <div key={r.key} className={`mcard${r.tone === "warn" || r.tone === "bad" ? ` mcard--flag t-${r.tone}` : ""}`}>
+            <div className="mcard__head">
+              <b>{r.label}</b>
+              {r.tone === "na" ? <span className="small faint">{r.result}</span> : <Chip tone={r.tone} size="sm">{r.result}</Chip>}
+            </div>
+            {r.cells.map((c, i) =>
+              c.kind === "na" ? null : (
+                <button
+                  key={i}
+                  className={`mcard__row cmp--${c.kind}${c.kind === "dev" ? ` t-${r.tone}` : ""}`}
+                  disabled={!c.target}
+                  onClick={() => c.target && onEvidence(c.target)}
+                >
+                  <span className="small faint">{DOC_SHORT[DOC_ORDER[i]]}</span>
+                  <span className="mcard__val">{c.kind === "dev" ? `${r.tone === "bad" ? "✕" : "!"} ${c.label}` : c.label}</span>
+                </button>
+              ),
+            )}
+          </div>
+        ))}
+      </div>
+      <div className="card scroll only-wide-block">
         <table className="tbl tbl--comp">
           <thead>
             <tr>
@@ -49,6 +73,6 @@ export function Compare({ rows, onEvidence }: { rows: CompRow[]; onEvidence: (t:
           </tbody>
         </table>
       </div>
-    </section>
+    </Reveal>
   );
 }

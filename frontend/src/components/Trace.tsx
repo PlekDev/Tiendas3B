@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
+import { motion } from "motion/react";
 import type { Report } from "../types";
 import { getGrafo } from "../api";
 import { seconds } from "../labels";
 import type { AgentRow } from "../model";
 import { Collapse } from "./Bits";
+import { Reveal } from "../anim";
 
 const fmt = (ms: number) => `${ms.toLocaleString("es-MX")} ms`;
 
@@ -17,7 +19,7 @@ export function Trace({ report, rows }: { report: Report; rows: AgentRow[] }) {
   const heur = report.llm_mode === "heuristico";
 
   return (
-    <section className="card">
+    <Reveal className="card trace-card">
       <button className="how__head" aria-expanded={open} onClick={() => setOpen(!open)}>
         <span className="sec" style={{ gap: 2 }}>
           <span className="h2" style={{ fontSize: 20 }}>
@@ -25,7 +27,9 @@ export function Trace({ report, rows }: { report: Report; rows: AgentRow[] }) {
           </span>
           <span className="small muted">Para auditoría: qué revisó cada agente y cuánto tardó.</span>
         </span>
-        <span className="chev">{open ? "Ocultar ▴" : "Ver ▾"}</span>
+        <motion.span className="chev" animate={{ rotate: open ? 180 : 0 }} transition={{ type: "spring", stiffness: 520, damping: 18 }}>
+          ▾
+        </motion.span>
       </button>
       <Collapse open={open}>
         <div className="how__body">
@@ -76,6 +80,6 @@ export function Trace({ report, rows }: { report: Report; rows: AgentRow[] }) {
           )}
         </div>
       </Collapse>
-    </section>
+    </Reveal>
   );
 }

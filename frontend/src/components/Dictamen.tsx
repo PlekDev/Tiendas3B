@@ -1,5 +1,7 @@
 import { useMemo, useState } from "react";
-import { AnimatePresence } from "motion/react";
+import { AnimatePresence, motion } from "motion/react";
+import { ArrowLeft, Download, Trash2 } from "lucide-react";
+import { Reveal, bouncy, fadeUp, press, softSpring, stagger, useNarrow } from "../anim";
 import type { Entry, Evidence, Report } from "../types";
 import { CONFIDENCE_HELP, VERDICT_UI, seconds, shortDate } from "../labels";
 import * as M from "../model";
@@ -53,6 +55,7 @@ export function Dictamen({
     vm.findings[0] ? { [vm.findings[0].key]: true } : {},
   );
   const [passesOpen, setPassesOpen] = useState(false);
+  const narrow = useNarrow();
   const show = (t?: M.EvTarget) => t && setEv(t);
   const showEv = (e?: Evidence) => e && setEv({ evidence: e });
 
@@ -75,9 +78,9 @@ export function Dictamen({
       <main className="dict__main" data-screen-label="Dictamen">
         <div className="dict__bar">
           <div className="chips" style={{ alignItems: "center", gap: "8px 14px" }}>
-            <button className="back" onClick={onBack}>
-              ← Bandeja
-            </button>
+            <motion.button className="back back--icon" onClick={onBack} whileHover={{ x: -3 }} whileTap={{ scale: 0.95 }}>
+              <ArrowLeft size={20} aria-hidden /> Bandeja
+            </motion.button>
             <span className="mono" style={{ fontSize: 14, fontWeight: 500 }}>
               {report.expediente_id}
             </span>
@@ -87,25 +90,54 @@ export function Dictamen({
             <span>·</span>
             <span>Analizado en {seconds(report.processing_ms)}</span>
             {heur ? <Chip tone="info">Modo sin IA</Chip> : <Chip tone="ok">IA: {report.llm_mode}</Chip>}
-            <button className="btn" onClick={() => download(report)}>
-              Descargar JSON
-            </button>
-            <button className="btn" onClick={onRemove}>
-              Quitar de la bandeja
-            </button>
+            <motion.button className="btn btn--icon" onClick={() => download(report)} title="Descargar JSON" {...press}>
+              <Download size={18} aria-hidden />
+              <span className="btn__label">Descargar JSON</span>
+            </motion.button>
+            <motion.button className="btn btn--icon" onClick={onRemove} title="Quitar de la bandeja" {...press}>
+              <Trash2 size={18} aria-hidden />
+              <span className="btn__label">Quitar</span>
+            </motion.button>
           </div>
         </div>
 
-        <section className={`hero t-${v.cls}`}>
+        <motion.section
+          className={`hero t-${v.cls}`}
+          initial={{ opacity: 0, y: 30, scale: 0.97 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={softSpring}
+        >
+          <motion.span
+            className="hero__glow"
+            aria-hidden
+            initial={{ opacity: 0 }}
+            animate={{ opacity: [0, 0.9, 0.5] }}
+            transition={{ duration: 1.4, ease: "easeOut" }}
+          />
           <div className="hero__top">
             <div className="hero__verdict">
               <div className="hero__title">
-                <span className="hero__icon" aria-hidden>
+                <motion.span
+                  className="hero__icon"
+                  aria-hidden
+                  initial={{ scale: 0, rotate: -180 }}
+                  animate={{ scale: [0, 1.25, 1], rotate: 0 }}
+                  transition={{ duration: 0.7, times: [0, 0.6, 1], ease: "easeOut", delay: 0.1 }}
+                >
                   {v.icon}
-                </span>
-                <h1 className="hero__h1">{report.recommendation}</h1>
+                </motion.span>
+                <motion.h1
+                  className="hero__h1"
+                  initial={{ opacity: 0, x: -20, filter: "blur(6px)" }}
+                  animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
+                  transition={{ ...softSpring, delay: 0.2 }}
+                >
+                  {report.recommendation}
+                </motion.h1>
               </div>
-              <p className="hero__lead">{vm.lead}</p>
+              <motion.p className="hero__lead" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.35 }}>
+                {vm.lead}
+              </motion.p>
             </div>
             <div className="hero__conf">
               <ConfidenceRing value={report.confidence} tone={v.cls} />
@@ -122,13 +154,16 @@ export function Dictamen({
               </div>
             </div>
           </div>
-          <div className="reasons">
+          <motion.div className="reasons" variants={stagger(0.08, 0.4)} initial="hidden" animate="show">
             <span className="eyebrow" style={{ marginBottom: 6 }}>
               Razones principales
             </span>
             {vm.reasons.map((r, i) => (
-              <button
+              <motion.button
                 key={i}
+                variants={fadeUp}
+                whileHover={{ x: 6 }}
+                whileTap={{ scale: 0.98 }}
                 className="reason"
                 onClick={() => {
                   if (r.target) setEv(r.target);
@@ -148,16 +183,22 @@ export function Dictamen({
                     {r.target ? "Ver prueba →" : "Ver hallazgo →"}
                   </span>
                 )}
-              </button>
+              </motion.button>
             ))}
-          </div>
-        </section>
+          </motion.div>
+        </motion.section>
 
-        <section className="sec">
+        <div className="dict__cols">
+        <Reveal className="sec dict__docs">
           <h2 className="h2">Documentos</h2>
-          <div className="docs">
+          <motion.div className="docs" variants={stagger(0.07)} initial="hidden" whileInView="show" viewport={{ once: true }}>
             {vm.docs.map((d) => (
-              <div key={d.key} className={`doc${d.missing ? " doc--missing" : ""}`}>
+              <motion.div
+                key={d.key}
+                variants={fadeUp}
+                whileHover={{ y: -3 }}
+                className={`doc${d.missing ? " doc--missing" : ""}`}
+              >
                 <div className="doc__head">
                   <span>{d.title}</span>
                   {d.missing ? (
@@ -188,28 +229,38 @@ export function Dictamen({
                     </span>
                   ))}
                   {d.missing && (
-                    <button className="btn" style={{ alignSelf: "flex-start", height: 30 }} onClick={onUpload}>
+                    <motion.button className="btn" style={{ alignSelf: "flex-start" }} onClick={onUpload} {...press}>
                       Subir documento
-                    </button>
+                    </motion.button>
                   )}
                 </div>
-              </div>
+              </motion.div>
             ))}
-          </div>
-        </section>
+          </motion.div>
+        </Reveal>
 
-        <section className="sec">
+        <Reveal className="sec dict__findings">
           <div className="sec__head sec__head--row">
             <h2 className="h2">Hallazgos</h2>
             <span className="small muted">{summary}</span>
           </div>
-          {!vm.findings.length && <div className="okbox">✓ Nada requiere acción en este expediente.</div>}
-          <div className="findings">
+          {!vm.findings.length && (
+            <motion.div className="okbox" initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={bouncy}>
+              ✓ Nada requiere acción en este expediente.
+            </motion.div>
+          )}
+          <motion.div className="findings" variants={stagger(0.06)} initial="hidden" whileInView="show" viewport={{ once: true }}>
             {vm.findings.map((f) => {
               const isOpen = !!open[f.key];
               const doubt = !f.evidence.length && !f.missingDoc;
               return (
-                <div key={f.key} id={`f-${f.key}`} className={`finding t-${f.tone}${doubt ? " finding--doubt" : ""}`}>
+                <motion.div
+                  key={f.key}
+                  id={`f-${f.key}`}
+                  variants={fadeUp}
+                  layout
+                  className={`finding t-${f.tone}${doubt ? " finding--doubt" : ""}${isOpen ? " is-open" : ""}`}
+                >
                   <button
                     className="finding__head"
                     aria-expanded={isOpen}
@@ -222,7 +273,9 @@ export function Dictamen({
                       <b>{f.title}</b>
                       <span className="small faint">{f.docs}</span>
                     </span>
-                    <span className="chev">{isOpen ? "Ocultar ▴" : "Ver detalle ▾"}</span>
+                    <motion.span className="chev" animate={{ rotate: isOpen ? 180 : 0 }} transition={bouncy} aria-label={isOpen ? "Ocultar" : "Ver detalle"}>
+                      ▾
+                    </motion.span>
                   </button>
                   <Collapse open={isOpen}>
                     <div className="finding__body">
@@ -272,7 +325,7 @@ export function Dictamen({
                       )}
                     </div>
                   </Collapse>
-                </div>
+                </motion.div>
               );
             })}
             {vm.passes.length > 0 && (
@@ -280,9 +333,9 @@ export function Dictamen({
                 <button className="passes__head" aria-expanded={passesOpen} onClick={() => setPassesOpen(!passesOpen)}>
                   <Dot tone="ok" />
                   <span style={{ flex: 1, fontWeight: 600 }}>{vm.passes.length} reglas cumplen</span>
-                  <span className="chev" style={{ marginTop: 0 }}>
-                    {passesOpen ? "Ocultar ▴" : "Ver ▾"}
-                  </span>
+                  <motion.span className="chev" style={{ marginTop: 0 }} animate={{ rotate: passesOpen ? 180 : 0 }} transition={bouncy}>
+                    ▾
+                  </motion.span>
                 </button>
                 <Collapse open={passesOpen}>
                   <div className="passes__list">
@@ -302,17 +355,20 @@ export function Dictamen({
                 </Collapse>
               </div>
             )}
-          </div>
-        </section>
+          </motion.div>
+        </Reveal>
+        </div>
 
         <Compare rows={vm.comp} onEvidence={setEv} />
-        <Matrix rows={vm.matrix} />
+        <div className="dict__duo">
+          <Matrix rows={vm.matrix} />
+          <Trace report={report} rows={vm.agents} />
+        </div>
         <Fields rows={vm.fields} onEvidence={setEv} />
-        <Trace report={report} rows={vm.agents} />
       </main>
 
       <AnimatePresence>
-        {ev && <EvidencePanel key="ev" report={report} target={ev} onClose={() => setEv(null)} />}
+        {ev && <EvidencePanel key="ev" report={report} target={ev} narrow={narrow} onClose={() => setEv(null)} />}
       </AnimatePresence>
     </div>
   );
