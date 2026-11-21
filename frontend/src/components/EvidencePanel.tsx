@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
-import { ChevronLeft, ChevronRight, X } from "lucide-react";
-import type { Report } from "../types";
+import { ChevronLeft, ChevronRight, Highlighter, X } from "lucide-react";
+import type { Evidence, Report } from "../types";
 import { DOC_LABEL } from "../labels";
 import { fileUrl } from "../store";
 import { type EvTarget, snippetsOf } from "../model";
@@ -13,11 +13,13 @@ export function EvidencePanel({
   target,
   narrow,
   onClose,
+  onLocate,
 }: {
   report: Report;
   target: EvTarget;
   narrow: boolean;
   onClose: () => void;
+  onLocate?: (e: Evidence) => void;
 }) {
   const { evidence, doubt } = target;
   const [page, setPage] = useState(evidence.page ?? 1);
@@ -110,6 +112,12 @@ export function EvidencePanel({
           <figure className="quote">
             <blockquote style={{ fontSize: 18 }}>“{evidence.snippet}”</blockquote>
           </figure>
+        )}
+
+        {onLocate && (
+          <motion.button className="btn btn--primary" style={{ alignSelf: "flex-start" }} onClick={() => onLocate(evidence)} whileTap={{ scale: 0.96 }}>
+            <Highlighter size={18} aria-hidden /> Ver subrayado en el documento
+          </motion.button>
         )}
 
         {url ? (

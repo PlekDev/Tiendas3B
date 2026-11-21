@@ -11,6 +11,8 @@ import { Matrix } from "./Matrix";
 import { Fields } from "./Fields";
 import { Trace } from "./Trace";
 import { EvidencePanel } from "./EvidencePanel";
+import { DocViewer, type Locate, canView } from "./DocViewer";
+import { CopyData } from "./CopyData";
 
 function download(report: Report) {
   const blob = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" });
@@ -48,6 +50,7 @@ export function Dictamen({
       agents: M.agents(report),
       lead: M.lead(report),
       why: M.confidenceWhy(report),
+      copy: M.copyDocs(report),
     };
   }, [report]);
 
@@ -56,6 +59,11 @@ export function Dictamen({
   );
   const [passesOpen, setPassesOpen] = useState(false);
   const narrow = useNarrow();
+  const [locate, setLocate] = useState<Locate | null>(null);
+  const onLocate = (e: Evidence) => {
+    setEv(null);
+    setLocate((l) => ({ doc: e.document_name, snippet: e.snippet, n: (l?.n ?? 0) + 1 }));
+  };
   const show = (t?: M.EvTarget) => t && setEv(t);
   const showEv = (e?: Evidence) => e && setEv({ evidence: e });
 
@@ -359,16 +367,28 @@ export function Dictamen({
         </Reveal>
         </div>
 
+        <DocViewer report={report} locate={locate} />
+
         <Compare rows={vm.comp} onEvidence={setEv} />
         <div className="dict__duo">
           <Matrix rows={vm.matrix} />
           <Trace report={report} rows={vm.agents} />
         </div>
         <Fields rows={vm.fields} onEvidence={setEv} />
+        <CopyData report={report} docs={vm.copy} />
       </main>
 
       <AnimatePresence>
-        {ev && <EvidencePanel key="ev" report={report} target={ev} narrow={narrow} onClose={() => setEv(null)} />}
+        {ev && (
+          <EvidencePanel
+            key="ev"
+            report={report}
+            target={ev}
+            narrow={narrow}
+            onClose={() => setEv(null)}
+            onLocate={canView(report, ev.evidence.document_name) ? onLocate : undefined}
+          />
+        )}
       </AnimatePresence>
     </div>
   );

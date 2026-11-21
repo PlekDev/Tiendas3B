@@ -30,3 +30,47 @@ export function analizar(id: string, files: File[], usarLlm: boolean): Promise<R
   files.forEach((f) => body.append("files", f));
   return fetch("/api/v1/analizar", { method: "POST", body }).then(parse<Report>);
 }
+
+/* ---------- Visor: páginas y dónde está cada dato ---------- */
+
+export interface VisorMarkIn {
+  id: string;
+  texto: string | null;
+  contexto: string | null;
+  pagina: number | null;
+}
+export interface VisorPage {
+  page: number;
+  width: number;
+  height: number;
+  image: string;
+  source: "pdf" | "ocr" | "vacia";
+}
+export interface VisorMark {
+  id: string;
+  page: number;
+  rects: [number, number, number, number][];
+  score: number;
+  exact: boolean;
+}
+export interface VisorData {
+  document_name: string;
+  pages: VisorPage[];
+  marks: VisorMark[];
+  missing: string[];
+}
+
+export function getVisor(file: Blob, name: string, marcas: VisorMarkIn[]): Promise<VisorData> {
+  const body = new FormData();
+  body.append("file", file, name);
+  body.append("marcas", JSON.stringify(marcas));
+  return fetch("/api/v1/visor", { method: "POST", body }).then(parse<VisorData>);
+}
+
+export function getVisorEjemplo(expedienteId: string, documento: string, marcas: VisorMarkIn[]): Promise<VisorData> {
+  const body = new FormData();
+  body.append("expediente_id", expedienteId);
+  body.append("documento", documento);
+  body.append("marcas", JSON.stringify(marcas));
+  return fetch("/api/v1/visor/ejemplo", { method: "POST", body }).then(parse<VisorData>);
+}
