@@ -5,6 +5,7 @@ Los archivos subidos se procesan en una carpeta temporal y se borran al terminar
 ningún documento queda guardado en el servidor.
 """
 
+import asyncio
 import hmac
 import logging
 import os
@@ -219,7 +220,9 @@ async def analizar_endpoint(
     ):
         paths = await _save_uploads_to_dir(files, Path(tmp))
         # Sin caché: los documentos subidos no dejan rastro en el servidor.
-        documents = [await run_in_threadpool(load_document, p, False) for p in paths]
+        documents = list(
+            await asyncio.gather(*(run_in_threadpool(load_document, p, False) for p in paths))
+        )
         logger.info(
             "Analizando %d documentos",
             len(documents),
