@@ -96,3 +96,42 @@ def test_inactive_and_unknown_rules_are_skipped() -> None:
         ],
     )
     assert evaluate_rules(_analysis(), cartucho) == []
+
+
+def _anio(value: str, today: date, tolerancia: int = 0) -> bool:
+    rule = Rule(
+        id="R",
+        tipo="fecha_anio_actual",
+        campo="fecha_emision_vigencia",
+        descripcion="d",
+        parametros={"anios_tolerancia": tolerancia},
+    )
+    return _run(rule, _analysis(fecha_emision_vigencia=value), today)
+
+
+def test_fecha_anio_actual_usa_el_anio_del_dia_de_analisis() -> None:
+    hoy = date(2026, 11, 21)
+    assert _anio("2 de abril de 2026", hoy)
+    assert not _anio("2 de abril de 2025", hoy)
+    # El mismo documento es "actual" si se analiza en 2025: el año no está fijo en el código.
+    assert _anio("2 de abril de 2025", date(2025, 12, 1))
+
+
+def test_fecha_anio_actual_tolerancia_y_vigencia() -> None:
+    hoy = date(2026, 11, 21)
+    assert _anio("15/03/2025", hoy, tolerancia=1)
+    assert _anio("Expedida 10 de marzo de 2025, vigente hasta 10 de marzo de 2027", hoy)
+    assert not _anio("Expedida 10 de marzo de 2024, vigente hasta 10 de marzo de 2025", hoy)
+
+
+def test_fecha_anio_actual_falla_sin_fecha_o_en_el_futuro() -> None:
+    hoy = date(2026, 11, 21)
+    assert not _anio("sin fecha legible", hoy)
+    assert not _anio("3 de enero de 2062", hoy)  # error típico de OCR
+
+
+def test_fecha_anio_actual_sin_today_usa_la_fecha_real() -> None:
+    rule = Rule(id="R", tipo="fecha_anio_actual", campo="fecha_emision_vigencia", descripcion="d")
+    cartucho = Cartucho(tipo_documento=DocumentType.USO_DE_SUELO, nombre="t", reglas=[rule])
+    actual = f"1 de enero de {date.today().year}"
+    assert evaluate_rules(_analysis(fecha_emision_vigencia=actual), cartucho)[0].passed
